@@ -521,6 +521,158 @@ def arm_rack2dock() -> bool:
         return True
     else:
         print(f"❌ Rack to dock failed: {wait_result['status_text']}\n")
+        return False
+
+
+def courier_dock2rack() -> bool:
+    """
+    Courier movement from dock to rack: LM4 -> AP3 (load) -> LM4 -> LM5 -> AP7 (unload).
+    
+    Returns:
+        True if task completed successfully
+    """
+    if robot is None:
+        print("❌ Robot not connected!")
+        return False
+    
+    # Define the move task list
+    move_task_list = [
+        {
+            "source_id": "LM4",
+            "id": "AP3",
+            "task_id": task_id_gen(),
+            "recognize": True,
+            "operation": "JackLoad"
+        },
+        {
+            "source_id": "AP3",
+            "id": "LM4",
+            "task_id": task_id_gen(),
+        },
+        {
+            "source_id": "SELF_POSITION",
+            "id": "SELF_POSITION",
+            "task_id": task_id_gen(),
+            "move_angle": 1.5707963,
+            "skill_name": "GoByOdometer",
+            "speed_w": 0.5,
+            "loc_mode": 1,
+            "operation": "JackLoad",
+        },
+        {
+            "source_id": "LM4",
+            "id": "LM5",
+            "task_id": task_id_gen(),
+            "spin": True
+        },
+        {
+            "source_id": "LM5",
+            "id": "AP7",
+            "task_id": task_id_gen(),
+            "operation": "JackUnload",
+            "spin": True
+        }
+    ]
+    
+    print("\n📦 Courier Dock to Rack: LM4 → AP3 (load) → LM4 → LM5 → AP7 (unload)")
+    
+    # Send gotargetlist command
+    result = robot.task.gotargetlist(move_task_list)
+    
+    if not result or result.get('ret_code') != 0:
+        print("❌ Failed to start task")
+        return False
+    
+    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
+    print("⏳ Waiting for completion...")
+    
+    # Wait for task completion
+    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
+    
+    # Display result
+    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
+    
+    if wait_result['finished_path']:
+        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
+    
+    if wait_result['success']:
+        print("✅ Courier dock to rack completed successfully!\n")
+        return True
+    else:
+        print(f"❌ Courier dock to rack failed: {wait_result['status_text']}\n")
+        return False
+
+
+def courier_rack2dock() -> bool:
+    """
+    Courier movement from rack to dock: Self (load) -> LM5 -> LM4 -> AP3 (unload) -> LM4.
+    
+    Returns:
+        True if task completed successfully
+    """
+    if robot is None:
+        print("❌ Robot not connected!")
+        return False
+    
+    # Define the move task list
+    move_task_list = [
+        {
+            "source_id": "SELF_POSITION",
+            "id": "SELF_POSITION",
+            "task_id": task_id_gen(),
+            "operation": "JackLoad",
+        },
+        {
+            "source_id": "AP7",
+            "id": "LM5",
+            "task_id": task_id_gen(),
+            "spin": True
+        },
+        {
+            "source_id": "LM5",
+            "id": "LM4",
+            "task_id": task_id_gen(),
+            "spin": True
+        },
+        {
+            "source_id": "LM4",
+            "id": "AP3",
+            "task_id": task_id_gen(),
+            "operation": "JackUnload"
+        },
+        {
+            "source_id": "AP3",
+            "id": "LM4",
+            "task_id": task_id_gen(),
+        }
+    ]
+    
+    print("\n📦 Courier Rack to Dock: Self (load) → LM5 → LM4 → AP3 (unload) → LM4")
+    
+    # Send gotargetlist command
+    result = robot.task.gotargetlist(move_task_list)
+    
+    if not result or result.get('ret_code') != 0:
+        print("❌ Failed to start task")
+        return False
+    
+    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
+    print("⏳ Waiting for completion...")
+    
+    # Wait for task completion
+    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
+    
+    # Display result
+    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
+    
+    if wait_result['finished_path']:
+        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
+    
+    if wait_result['success']:
+        print("✅ Courier rack to dock completed successfully!\n")
+        return True
+    else:
+        print(f"❌ Courier rack to dock failed: {wait_result['status_text']}\n")
         return False    
 
 # ============================================================================
@@ -536,16 +688,22 @@ def print_help():
     print("  looptest               - Run loop test (LM2 -> LM9 -> LM5 -> LM2)")
     
     print("\n🦾 Arm Movement Commands:")
-    print("  dock2rack              - Move from dock to rack")
+    print("  arm_dock2rack          - Move from dock to rack")
     print("                           (LM9 -> AP8(load) -> LM9 -> LM5 -> AP10(unload))")
-    print("  rack2side              - Move from rack to side")
+    print("  arm_rack2side          - Move from rack to side")
     print("                           (AP10(load) -> LM12 -> AP11(unload))")
-    print("  side2rack              - Move from side to rack")
+    print("  arm_side2rack          - Move from side to rack")
     print("                           (AP11(load) -> LM12 -> AP10(unload))")
-    print("  rack2dock              - Move from rack to dock")
+    print("  arm_rack2dock          - Move from rack to dock")
     print("                           (AP10(load) -> LM5 -> LM9 -> AP8(unload) -> LM9)")
     
-    print("\n📊 Information:")
+    print("\n� Courier Movement Commands:")
+    print("  courier_dock2rack      - Courier from dock to rack")
+    print("                           (LM4 -> AP3(load) -> LM4 -> LM5 -> AP7(unload))")
+    print("  courier_rack2dock      - Courier from rack to dock")
+    print("                           (Self(load) -> LM5 -> LM4 -> AP3(unload) -> LM4)")
+    
+    print("\n�📊 Information:")
     print("  status                 - Display current robot status")
     
     print("\n❓ Other:")
@@ -630,17 +788,23 @@ def main():
                 elif command == 'looptest':
                     loop_test()
                 
-                elif command == 'dock2rack':
+                elif command == 'arm_dock2rack':
                     arm_dock2rack()
                 
-                elif command == 'rack2side':
+                elif command == 'arm_rack2side':
                     arm_rack2side()
                 
-                elif command == 'side2rack':
+                elif command == 'arm_side2rack':
                     arm_side2rack()
                 
-                elif command == 'rack2dock':
+                elif command == 'arm_rack2dock':
                     arm_rack2dock()
+                
+                elif command == 'courier_dock2rack':
+                    courier_dock2rack()
+                
+                elif command == 'courier_rack2dock':
+                    courier_rack2dock()
                 
                 else:
                     print(f"❌ Unknown command: {command}")
