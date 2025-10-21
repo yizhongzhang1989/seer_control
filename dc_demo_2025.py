@@ -156,20 +156,184 @@ def status() -> bool:
 
 
 # ============================================================================
-# Test Functions
+# Generic Navigation Execution Function
 # ============================================================================
 
-def loop_test() -> bool:
+def execute_navigation(move_task_list: List[Dict[str, Any]], description: str) -> bool:
+    """
+    Execute a navigation task with a given move task list.
+    
+    This is a generic function that handles the common pattern for all navigation tasks:
+    1. Check robot connection
+    2. Send gotargetlist command
+    3. Wait for task completion
+    4. Report results
+    
+    Args:
+        move_task_list: List of waypoints/tasks to execute
+        description: Human-readable description of the navigation task
+        
+    Returns:
+        True if task completed successfully, False otherwise
+    """
+    if robot is None:
+        print("❌ Robot not connected!")
+        return False
+    
+    print(f"\n🚀 {description}")
+    
+    # Send gotargetlist command
+    result = robot.task.gotargetlist(move_task_list)
+    
+    if not result or result.get('ret_code') != 0:
+        print("❌ Failed to start task")
+        if result:
+            print(f"   Error code: {result.get('ret_code')}")
+            print(f"   Message: {result.get('msg', 'No error message')}")
+        return False
+    
+    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
+    print("⏳ Waiting for completion...")
+    
+    # Wait for task completion
+    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
+    
+    # Display result
+    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
+    
+    if wait_result['finished_path']:
+        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
+    
+    if wait_result['success']:
+        print(f"✅ {description} completed successfully!\n")
+        return True
+    else:
+        print(f"❌ {description} failed: {wait_result['status_text']}\n")
+        return False
+
+
+def goto(target_id: str) -> bool:
+    """
+    Simple navigation to a target point - Navigate robot to target by ID.
+    
+    This is a simplified function that navigates the robot from its current
+    position to a specified target station/point.
+    
+    Args:
+        target_id: Target station/point name (e.g., "LM2", "AP1", "Station5")
+        
+    Returns:
+        True if navigation completed successfully, False otherwise
+        
+    Examples:
+        # Navigate to a landmark
+        goto("LM2")
+        
+        # Navigate to an action point
+        goto("AP1")
+    """
+    if robot is None:
+        print("❌ Robot not connected!")
+        return False
+    
+    print(f"\n🎯 Navigating to: {target_id}")
+    
+    # Use gotarget with only the target ID
+    result = robot.task.gotarget(id=target_id)
+    
+    if not result or result.get('ret_code') != 0:
+        print("❌ Failed to start navigation")
+        if result:
+            print(f"   Error code: {result.get('ret_code')}")
+            print(f"   Message: {result.get('msg', 'No error message')}")
+        return False
+    
+    print(f"✅ Navigation started (ID: {result.get('task_id', 'N/A')})")
+    print("⏳ Waiting for completion...")
+    
+    # Wait for task completion
+    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
+    
+    # Display result
+    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
+    
+    if wait_result['finished_path']:
+        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
+    
+    if wait_result['success']:
+        print(f"✅ Arrived at {target_id}!\n")
+        return True
+    else:
+        print(f"❌ Navigation to {target_id} failed: {wait_result['status_text']}\n")
+        return False
+
+
+def goto_start(move_task_list: List[Dict[str, Any]]) -> bool:
+    """
+    Navigate to the starting position of a move task list.
+    
+    This function finds the first source_id in the move_task_list that is not
+    "SELF_POSITION" and navigates the robot there. This is useful for positioning
+    the robot at the correct starting location before executing a task sequence.
+    
+    Args:
+        move_task_list: List of waypoints/tasks (same format as execute_navigation)
+        
+    Returns:
+        True if navigation to start position completed successfully, False otherwise
+        
+    Examples:
+        # Navigate to starting position before running arm_dock2rack
+        move_task_list = [
+            {"source_id": "LM9", "id": "AP8", "task_id": "001", "operation": "JackLoad"},
+            {"source_id": "AP8", "id": "LM9", "task_id": "002"},
+            ...
+        ]
+        goto_start(move_task_list)  # Will navigate to LM9
+        
+        # If first source_id is SELF_POSITION, finds next non-SELF_POSITION
+        move_task_list = [
+            {"source_id": "SELF_POSITION", "id": "SELF_POSITION", "task_id": "001"},
+            {"source_id": "AP10", "id": "LM12", "task_id": "002"},
+            ...
+        ]
+        goto_start(move_task_list)  # Will navigate to AP10
+    """
+    if robot is None:
+        print("❌ Robot not connected!")
+        return False
+    
+    if not move_task_list:
+        print("❌ Empty move task list!")
+        return False
+    
+    # Find the first source_id that is not SELF_POSITION
+    start_position = None
+    for task in move_task_list:
+        source_id = task.get('source_id', '')
+        if source_id and source_id != 'SELF_POSITION':
+            start_position = source_id
+            break
+    
+    if not start_position:
+        print("⚠️ No valid starting position found in move task list (all are SELF_POSITION)")
+        return False
+    
+    print(f"📍 Starting position identified: {start_position}")
+    return goto(start_position)
+
+
+# ============================================================================
+# Navigation Functions for DC Robot
+# ============================================================================
+
+def looptest() -> bool:
     """
     Execute a loop test navigating through multiple stations: LM2 -> LM9 -> LM5 -> LM2.
     
     Returns:
         True if loop test completed successfully
     """
-    if robot is None:
-        print("❌ Robot not connected!")
-        return False
-    
     # Define the move task list: LM2 -> LM9 -> LM5 -> LM2
     move_task_list = [
         {
@@ -189,33 +353,11 @@ def loop_test() -> bool:
         }
     ]
     
-    print("\n🚀 Loop Test: LM2 → LM9 → LM5 → LM2")
-    
-    # Send gotargetlist command
-    result = robot.task.gotargetlist(move_task_list)
-    
-    if not result or result.get('ret_code') != 0:
-        print("❌ Failed to start task")
+    # Move to start position
+    if not goto_start(move_task_list):
         return False
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
-    print("⏳ Waiting for completion...")
-    
-    # Wait for task completion
-    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-    
-    # Display result
-    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-    
-    if wait_result['finished_path']:
-        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-    
-    if wait_result['success']:
-        print("✅ Loop test completed successfully!\n")
-        return True
-    else:
-        print(f"❌ Loop test failed: {wait_result['status_text']}\n")
-        return False
+    return execute_navigation(move_task_list, "Loop Test: LM2 → LM9 → LM5 → LM2")
 
 
 def arm_dock2rack() -> bool:
@@ -225,10 +367,6 @@ def arm_dock2rack() -> bool:
     Returns:
         True if task completed successfully
     """
-    if robot is None:
-        print("❌ Robot not connected!")
-        return False
-    
     # Define the move task list
     move_task_list = [
         {
@@ -258,33 +396,11 @@ def arm_dock2rack() -> bool:
         },
     ]
     
-    print("\n🚀 Dock to Rack: LM9 → AP8 (load) → LM9 → LM5 → AP10 (unload)")
-    
-    # Send gotargetlist command
-    result = robot.task.gotargetlist(move_task_list)
-    
-    if not result or result.get('ret_code') != 0:
-        print("❌ Failed to start task")
+    # Move to start position
+    if not goto_start(move_task_list):
         return False
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
-    print("⏳ Waiting for completion...")
-    
-    # Wait for task completion
-    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-    
-    # Display result
-    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-    
-    if wait_result['finished_path']:
-        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-    
-    if wait_result['success']:
-        print("✅ Dock to rack completed successfully!\n")
-        return True
-    else:
-        print(f"❌ Dock to rack failed: {wait_result['status_text']}\n")
-        return False    
+    return execute_navigation(move_task_list, "Dock to Rack: LM9 → AP8 (load) → LM9 → LM5 → AP10 (unload)")
 
 
 def arm_rack2side() -> bool:
@@ -294,10 +410,6 @@ def arm_rack2side() -> bool:
     Returns:
         True if task completed successfully
     """
-    if robot is None:
-        print("❌ Robot not connected!")
-        return False
-    
     # Define the move task list
     move_task_list = [
         {
@@ -330,33 +442,11 @@ def arm_rack2side() -> bool:
         },
     ]
     
-    print("\n🚀 Rack to Side: AP10 (load) → LM12 → AP11 (unload)")
-    
-    # Send gotargetlist command
-    result = robot.task.gotargetlist(move_task_list)
-    
-    if not result or result.get('ret_code') != 0:
-        print("❌ Failed to start task")
+    # Move to start position
+    if not goto_start(move_task_list):
         return False
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
-    print("⏳ Waiting for completion...")
-    
-    # Wait for task completion
-    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-    
-    # Display result
-    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-    
-    if wait_result['finished_path']:
-        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-    
-    if wait_result['success']:
-        print("✅ Rack to side completed successfully!\n")
-        return True
-    else:
-        print(f"❌ Rack to side failed: {wait_result['status_text']}\n")
-        return False    
+    return execute_navigation(move_task_list, "Rack to Side: AP10 (load) → LM12 → AP11 (unload)")
 
 
 def arm_side2rack() -> bool:
@@ -366,10 +456,6 @@ def arm_side2rack() -> bool:
     Returns:
         True if task completed successfully
     """
-    if robot is None:
-        print("❌ Robot not connected!")
-        return False
-
     # Define the move task list
     move_task_list = [
         {
@@ -422,33 +508,11 @@ def arm_side2rack() -> bool:
         },
     ]
     
-    print("\n🚀 Side to Rack: AP11 (load) → LM12 → AP10 (unload)")
-    
-    # Send gotargetlist command
-    result = robot.task.gotargetlist(move_task_list)
-    
-    if not result or result.get('ret_code') != 0:
-        print("❌ Failed to start task")
+    # Move to start position
+    if not goto_start(move_task_list):
         return False
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
-    print("⏳ Waiting for completion...")
-    
-    # Wait for task completion
-    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-    
-    # Display result
-    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-    
-    if wait_result['finished_path']:
-        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-    
-    if wait_result['success']:
-        print("✅ Side to rack completed successfully!\n")
-        return True
-    else:
-        print(f"❌ Side to rack failed: {wait_result['status_text']}\n")
-        return False    
+    return execute_navigation(move_task_list, "Side to Rack: AP11 (load) → LM12 → AP10 (unload)")
 
 
 def arm_rack2dock() -> bool:
@@ -458,10 +522,6 @@ def arm_rack2dock() -> bool:
     Returns:
         True if task completed successfully
     """
-    if robot is None:
-        print("❌ Robot not connected!")
-        return False
-    
     # Define the move task list
     move_task_list = [
         {
@@ -495,33 +555,11 @@ def arm_rack2dock() -> bool:
         }
     ]
     
-    print("\n🚀 Rack to Dock: AP10 (load) → LM5 → LM9 → AP8 (unload) → LM9")
-    
-    # Send gotargetlist command
-    result = robot.task.gotargetlist(move_task_list)
-    
-    if not result or result.get('ret_code') != 0:
-        print("❌ Failed to start task")
+    # Move to start position
+    if not goto_start(move_task_list):
         return False
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
-    print("⏳ Waiting for completion...")
-    
-    # Wait for task completion
-    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-    
-    # Display result
-    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-    
-    if wait_result['finished_path']:
-        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-    
-    if wait_result['success']:
-        print("✅ Rack to dock completed successfully!\n")
-        return True
-    else:
-        print(f"❌ Rack to dock failed: {wait_result['status_text']}\n")
-        return False
+    return execute_navigation(move_task_list, "Rack to Dock: AP10 (load) → LM5 → LM9 → AP8 (unload) → LM9")
 
 
 def courier_dock2rack() -> bool:
@@ -531,10 +569,6 @@ def courier_dock2rack() -> bool:
     Returns:
         True if task completed successfully
     """
-    if robot is None:
-        print("❌ Robot not connected!")
-        return False
-    
     # Define the move task list
     move_task_list = [
         {
@@ -557,7 +591,6 @@ def courier_dock2rack() -> bool:
             "skill_name": "GoByOdometer",
             "speed_w": 0.5,
             "loc_mode": 1,
-            "operation": "JackLoad",
         },
         {
             "source_id": "LM4",
@@ -574,33 +607,11 @@ def courier_dock2rack() -> bool:
         }
     ]
     
-    print("\n📦 Courier Dock to Rack: LM4 → AP3 (load) → LM4 → LM5 → AP7 (unload)")
-    
-    # Send gotargetlist command
-    result = robot.task.gotargetlist(move_task_list)
-    
-    if not result or result.get('ret_code') != 0:
-        print("❌ Failed to start task")
+    # Move to start position
+    if not goto_start(move_task_list):
         return False
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
-    print("⏳ Waiting for completion...")
-    
-    # Wait for task completion
-    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-    
-    # Display result
-    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-    
-    if wait_result['finished_path']:
-        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-    
-    if wait_result['success']:
-        print("✅ Courier dock to rack completed successfully!\n")
-        return True
-    else:
-        print(f"❌ Courier dock to rack failed: {wait_result['status_text']}\n")
-        return False
+    return execute_navigation(move_task_list, "Courier Dock to Rack: LM4 → AP3 (load) → LM4 → LM5 → AP7 (unload)")
 
 
 def courier_rack2dock() -> bool:
@@ -610,10 +621,6 @@ def courier_rack2dock() -> bool:
     Returns:
         True if task completed successfully
     """
-    if robot is None:
-        print("❌ Robot not connected!")
-        return False
-    
     # Define the move task list
     move_task_list = [
         {
@@ -647,33 +654,11 @@ def courier_rack2dock() -> bool:
         }
     ]
     
-    print("\n📦 Courier Rack to Dock: Self (load) → LM5 → LM4 → AP3 (unload) → LM4")
-    
-    # Send gotargetlist command
-    result = robot.task.gotargetlist(move_task_list)
-    
-    if not result or result.get('ret_code') != 0:
-        print("❌ Failed to start task")
+    # Move to start position
+    if not goto_start(move_task_list):
         return False
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
-    print("⏳ Waiting for completion...")
-    
-    # Wait for task completion
-    wait_result = robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-    
-    # Display result
-    print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-    
-    if wait_result['finished_path']:
-        print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-    
-    if wait_result['success']:
-        print("✅ Courier rack to dock completed successfully!\n")
-        return True
-    else:
-        print(f"❌ Courier rack to dock failed: {wait_result['status_text']}\n")
-        return False    
+    return execute_navigation(move_task_list, "Courier Rack to Dock: Self (load) → LM5 → LM4 → AP3 (unload) → LM4")    
 
 # ============================================================================
 # Interactive Command Interface
@@ -686,6 +671,8 @@ def print_help():
     print("="*60)
     print("\n🤖 Main Commands:")
     print("  looptest               - Run loop test (LM2 -> LM9 -> LM5 -> LM2)")
+    print("  goto <target_id>       - Navigate to a target point by ID")
+    print("                           (e.g., goto LM2, goto AP1)")
     
     print("\n🦾 Arm Movement Commands:")
     print("  arm_dock2rack          - Move from dock to rack")
@@ -703,12 +690,13 @@ def print_help():
     print("  courier_rack2dock      - Courier from rack to dock")
     print("                           (Self(load) -> LM5 -> LM4 -> AP3(unload) -> LM4)")
     
-    print("\n�📊 Information:")
+    print("\n📊 Information:")
     print("  status                 - Display current robot status")
     
     print("\n❓ Other:")
     print("  help                   - Show this help message")
     print("  exit / quit            - Exit program and disconnect")
+
     
     print("\n💡 Note:")
     print("  Robot connects automatically at startup")
@@ -786,7 +774,15 @@ def main():
                     status()
                 
                 elif command == 'looptest':
-                    loop_test()
+                    looptest()
+                
+                elif command == 'goto':
+                    if len(args) < 1:
+                        print("❌ Usage: goto <target_id>")
+                        print("   Example: goto LM2")
+                    else:
+                        target_id = args[0]
+                        goto(target_id)
                 
                 elif command == 'arm_dock2rack':
                     arm_dock2rack()
