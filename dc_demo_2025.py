@@ -376,6 +376,52 @@ def looptest() -> bool:
     return execute_navigation(move_task_list, "Loop Test: LM2 → LM9 → LM5 → LM2")
 
 
+def goto_charge() -> bool:
+    """
+    Navigate robot to charging point CP0.
+    First checks if already charging. If not charging, goes via LM2 to CP0.
+    
+    Returns:
+        True if navigation to charging point completed successfully or already charging
+    """
+    if robot is None:
+        print("❌ Robot not connected!")
+        return False
+    
+    # Check battery status to see if already charging
+    print("🔋 Checking charging status...")
+    battery_result = robot.status.query_status("battery")
+    
+    if not battery_result or battery_result.get('ret_code') != 0:
+        print("⚠️  Warning: Could not query battery status, proceeding with navigation...")
+        is_charging = False
+    else:
+        is_charging = battery_result.get('charging', False)
+        battery_level = battery_result.get('battery_level', 'N/A')
+        print(f"   Battery: {battery_level}%, Charging: {is_charging}")
+    
+    # If already charging, no need to move
+    if is_charging:
+        print("✅ Already charging, no navigation needed\n")
+        return True
+    
+    # Not charging, go via LM2 to CP0
+    print("📍 Not charging, navigating: LM2 → CP0")
+    
+    # First go to LM2
+    if not goto("LM2"):
+        print("❌ Failed to reach LM2")
+        return False
+    
+    # Then go to CP0
+    if not goto("CP0"):
+        print("❌ Failed to reach CP0")
+        return False
+    
+    print("✅ Successfully reached charging point!\n")
+    return True
+
+
 def arm_dock2rack() -> bool:
     """
     Move from dock to rack: LM9 -> AP8 (load) -> LM9 -> LM5 -> AP10 (unload).
@@ -688,6 +734,8 @@ def print_help():
     print("="*60)
     print("\n🤖 Main Commands:")
     print("  looptest               - Run loop test (LM2 -> LM9 -> LM5 -> LM2)")
+    print("  goto_charge            - Navigate to charging point CP0")
+    print("                           (checks charging status, goes via LM2 if needed)")
     print("  goto <target_id>       - Navigate to a target point by ID")
     print("                           (e.g., goto LM2, goto AP1)")
     
@@ -792,6 +840,9 @@ def main():
                 
                 elif command == 'looptest':
                     looptest()
+                
+                elif command == 'goto_charge':
+                    goto_charge()
                 
                 elif command == 'goto':
                     if len(args) < 1:
