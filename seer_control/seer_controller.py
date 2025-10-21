@@ -153,6 +153,121 @@ class SeerController:
         return self._connections.copy()
     
     # ========================================================================
+    # Task Monitoring
+    # ========================================================================
+    
+    def wait_task_complete(self, query_interval: float = 1.0, timeout: float = 600.0) -> Dict[str, Any]:
+        """
+        Wait for current task to complete by monitoring task status.
+        
+        Continuously queries the task status until task_status is not 2 (RUNNING).
+        Returns when task reaches a terminal state: COMPLETED (4), FAILED (5), 
+        CANCELED (6), SUSPENDED (3), or NONE (0).
+        
+        Args:
+            query_interval: Time between status queries in seconds (default: 1.0)
+            timeout: Maximum time to wait in seconds (default: 600.0 = 10 min)
+        
+        Returns:
+            Dictionary containing:
+                - success (bool): True if task completed (status=4), False otherwise
+                - final_status (int): Final task_status value
+                - status_text (str): Human-readable status text
+                - elapsed_time (float): Total elapsed time in seconds
+                - query_count (int): Number of queries performed
+                - finished_path (list): List of completed waypoints
+                - unfinished_path (list): List of remaining waypoints
+        
+        Example:
+            controller = SeerController('192.168.1.123')
+            controller.connect_essential()
+            controller.task.gotarget(id="Station1")
+            
+            result = controller.wait_task_complete()
+            if result['success']:
+                print(f"Task completed in {result['elapsed_time']:.1f}s")
+            else:
+                print(f"Task failed: {result['status_text']}")
+        """
+        import time
+        
+        if not self._connections.get('status', False):
+            return {
+                'success': False,
+                'final_status': -1,
+                'status_text': 'ERROR',
+                'elapsed_time': 0.0,
+                'query_count': 0,
+                'finished_path': [],
+                'unfinished_path': [],
+                'error': 'Status controller not connected'
+            }
+        
+        query_count = 0
+        start_time = time.time()
+        
+        while True:
+            elapsed = time.time() - start_time
+            
+            # Check timeout
+            if elapsed > timeout:
+                return {
+                    'success': False,
+                    'final_status': -1,
+                    'status_text': 'TIMEOUT',
+                    'elapsed_time': elapsed,
+                    'query_count': query_count,
+                    'finished_path': [],
+                    'unfinished_path': [],
+                    'error': f'Timeout after {timeout}s'
+                }
+            
+            query_count += 1
+            
+            # Query task status
+            task_result = self.status.query_status('task', timeout=2.0)
+            
+            if not task_result or task_result.get('ret_code') != 0:
+                # Failed to query, wait and retry
+                time.sleep(query_interval)
+                continue
+            
+            # Extract task status
+            task_status = task_result.get('task_status', -1)
+            
+            # Status meanings:
+            # 0 = NONE, 1 = WAITING, 2 = RUNNING, 3 = SUSPENDED
+            # 4 = COMPLETED, 5 = FAILED, 6 = CANCELED
+            status_text_map = {
+                0: "NONE",
+                1: "WAITING",
+                2: "RUNNING",
+                3: "SUSPENDED",
+                4: "COMPLETED",
+                5: "FAILED",
+                6: "CANCELED"
+            }
+            status_text = status_text_map.get(task_status, "UNKNOWN")
+            
+            # If not running (status != 2), task is done
+            if task_status != 2:
+                finished_path = task_result.get('finished_path', [])
+                unfinished_path = task_result.get('unfinished_path', [])
+                
+                return {
+                    'success': task_status == 4,  # Only COMPLETED is success
+                    'final_status': task_status,
+                    'status_text': status_text,
+                    'elapsed_time': elapsed,
+                    'query_count': query_count,
+                    'finished_path': finished_path,
+                    'unfinished_path': unfinished_path
+                }
+            
+            # Task still running, wait before next query
+            time.sleep(query_interval)
+    
+    # ========================================================================
     # Statistics and Information
     # ========================================================================
     
