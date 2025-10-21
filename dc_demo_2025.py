@@ -217,13 +217,14 @@ def goto(target_id: str) -> bool:
     Simple navigation to a target point - Navigate robot to target by ID.
     
     This is a simplified function that navigates the robot from its current
-    position to a specified target station/point.
+    position to a specified target station/point. It first checks if the robot
+    is already at the target location and skips navigation if so.
     
     Args:
         target_id: Target station/point name (e.g., "LM2", "AP1", "Station5")
         
     Returns:
-        True if navigation completed successfully, False otherwise
+        True if already at target or navigation completed successfully, False otherwise
         
     Examples:
         # Navigate to a landmark
@@ -236,7 +237,22 @@ def goto(target_id: str) -> bool:
         print("❌ Robot not connected!")
         return False
     
-    print(f"\n🎯 Navigating to: {target_id}")
+    # Query current location first
+    loc_result = robot.status.query_status("loc")
+    
+    if not loc_result or loc_result.get('ret_code') != 0:
+        print("⚠️  Warning: Could not query current location, proceeding with navigation...")
+        current_station = None
+    else:
+        current_station = loc_result.get('current_station', '')
+        print(f"📍 Current location: {current_station}")
+    
+    # Check if already at target
+    if current_station and current_station == target_id:
+        print(f"✅ Already at {target_id}, skipping navigation\n")
+        return True
+    
+    print(f"🎯 Navigating to: {target_id}")
     
     # Use gotarget with only the target ID
     result = robot.task.gotarget(id=target_id)
@@ -373,7 +389,7 @@ def arm_dock2rack() -> bool:
             "source_id": "LM9",
             "id": "AP8",
             "task_id": task_id_gen(),
-            "recognize": False,
+            "recognize": True,
             "operation": "JackLoad"
         },
         {
@@ -417,6 +433,7 @@ def arm_rack2side() -> bool:
             "id": "SELF_POSITION",
             "task_id": task_id_gen(),
             "operation": "JackLoad",
+            "spin": True,
         },
         {
             "source_id": "AP10",
@@ -467,7 +484,7 @@ def arm_side2rack() -> bool:
             "source_id": "LM13",
             "id": "AP11",
             "task_id": task_id_gen(),
-            "recognize": False,
+            "recognize": True,
         },
         {
             "source_id": "SELF_POSITION",

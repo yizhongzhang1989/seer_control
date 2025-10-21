@@ -33,12 +33,20 @@ Date: October 21, 2025
 """
 
 from typing import Dict, Any
-from .seer_status_controller import SeerStatusController
-from .seer_task_controller import SeerTaskController
-from .seer_control_controller import SeerControlController
-from .seer_config_controller import SeerConfigController
-from .seer_other_controller import SeerOtherController
-from .seer_push_controller import SeerPushController
+try:
+    from .seer_status_controller import SeerStatusController
+    from .seer_task_controller import SeerTaskController
+    from .seer_control_controller import SeerControlController
+    from .seer_config_controller import SeerConfigController
+    from .seer_other_controller import SeerOtherController
+    from .seer_push_controller import SeerPushController
+except ImportError:
+    from seer_status_controller import SeerStatusController
+    from seer_task_controller import SeerTaskController
+    from seer_control_controller import SeerControlController
+    from seer_config_controller import SeerConfigController
+    from seer_other_controller import SeerOtherController
+    from seer_push_controller import SeerPushController
 
 
 class SeerController:
