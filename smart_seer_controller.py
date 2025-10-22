@@ -62,7 +62,7 @@ class SmartSeerController:
             "x", "y", "angle", "current_station",
             "vx", "vy", "w",
             "battery_level", "charging",
-            "emergency", "fatals", "errors", "warnings", "notices",
+            "emergency", "soft_emc", "fatals", "errors", "warnings", "notices",
             "create_on", "confidence",
             "task_status", "task_type"
         ]
