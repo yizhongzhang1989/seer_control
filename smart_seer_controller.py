@@ -12,7 +12,6 @@ Date: October 22, 2025
 
 from seer_control import SeerController
 from typing import Optional, Dict, Any, List
-import time
 import threading
 from datetime import datetime
 
@@ -551,73 +550,8 @@ class SmartSeerController:
             return -1
         
         return result.get('task_status', -1)
-    
-    def execute_navigation(self, move_task_list: List[Dict[str, Any]], description: str, wait: bool = True) -> Dict[str, Any]:
-        """
-        Execute a navigation task with a given move task list.
-        
-        This is a generic method that handles the common pattern for all navigation tasks:
-        1. Check robot connection
-        2. Send gotargetlist command
-        3. Optionally wait for task completion
-        4. Report results
-        
-        Args:
-            move_task_list: List of waypoints/tasks to execute
-            description: Human-readable description of the navigation task
-            wait: If True, waits for task completion (blocking). If False, returns immediately after starting task (non-blocking).
-            
-        Returns:
-            Dictionary with:
-            - success (bool): True if task started/completed successfully
-            - task_id (str): Task ID assigned by robot
-            - blocking (bool): Whether method waited for completion
-            - result (dict): Full result from wait_task_complete if wait=True, otherwise None
-        """
-        if not self.is_connected or self.robot is None:
-            print("❌ Robot not connected!")
-            return {"success": False, "task_id": None, "blocking": wait, "result": None}
-        
-        print(f"\n🚀 {description}")
-        
-        # Send gotargetlist command
-        result = self.robot.task.gotargetlist(move_task_list)
-        
-        if not result or result.get('ret_code') != 0:
-            print("❌ Failed to start task")
-            if result:
-                print(f"   Error code: {result.get('ret_code')}")
-                print(f"   Message: {result.get('msg', 'No error message')}")
-            return {"success": False, "task_id": None, "blocking": wait, "result": result}
-        
-        task_id = result.get('task_id', 'N/A')
-        print(f"✅ Task started (ID: {task_id})")
-        
-        # If non-blocking mode, return immediately
-        if not wait:
-            print("🔓 Non-blocking mode: returning immediately (task running in background)\n")
-            return {"success": True, "task_id": task_id, "blocking": False, "result": result}
-        
-        # Blocking mode: wait for completion
-        print("⏳ Waiting for completion...")
-        
-        # Wait for task completion
-        wait_result = self.robot.wait_task_complete(query_interval=1.0, timeout=600.0)
-        
-        # Display result
-        print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
-        
-        if wait_result['finished_path']:
-            print(f"   Path: {' → '.join(wait_result['finished_path'])}")
-        
-        if wait_result['success']:
-            print(f"✅ {description} completed successfully!\n")
-            return {"success": True, "task_id": task_id, "blocking": True, "result": wait_result}
-        else:
-            print(f"❌ {description} failed: {wait_result['status_text']}\n")
-            return {"success": False, "task_id": task_id, "blocking": True, "result": wait_result}
-    
-    def goto(self, target_id: str, wait: bool = True) -> Dict[str, Any]:
+
+    def goto(self, target_id: str, wait: bool = True, timeout: float = 60.0) -> Dict[str, Any]:
         """
         Simple navigation to a target point - Navigate robot to target by ID.
         
@@ -628,6 +562,7 @@ class SmartSeerController:
         Args:
             target_id: Target station/point name (e.g., "LM2", "AP1", "Station5")
             wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+            timeout: Maximum time to wait for navigation completion in seconds (default: 60.0, only used if wait=True)
             
         Returns:
             Dictionary with:
@@ -646,6 +581,9 @@ class SmartSeerController:
             result = controller.goto("AP1", wait=False)
             task_id = result["task_id"]
             # Check status later with task_status()
+            
+            # Custom timeout
+            result = controller.goto("LM2", timeout=120.0)
         """
         if not self.is_connected or self.robot is None:
             print("❌ Robot not connected!")
@@ -687,10 +625,10 @@ class SmartSeerController:
             return {"success": True, "task_id": task_id, "blocking": False, "already_at_target": False}
         
         # Blocking mode: wait for completion
-        print("⏳ Waiting for completion...")
+        print(f"⏳ Waiting for completion (timeout: {timeout}s)...")
         
         # Wait for task completion
-        wait_result = self.robot.wait_task_complete(query_interval=1.0, timeout=600.0)
+        wait_result = self.robot.wait_task_complete(query_interval=1.0, timeout=timeout)
         
         # Display result
         print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
@@ -704,8 +642,74 @@ class SmartSeerController:
         else:
             print(f"❌ Navigation to {target_id} failed: {wait_result['status_text']}\n")
             return {"success": False, "task_id": task_id, "blocking": True, "already_at_target": False}
-    
-    def goto_start(self, move_task_list: List[Dict[str, Any]], wait: bool = True) -> Dict[str, Any]:
+
+    def execute_navigation(self, move_task_list: List[Dict[str, Any]], description: str, wait: bool = True, timeout: float = 600.0) -> Dict[str, Any]:
+        """
+        Execute a navigation task with a given move task list.
+        
+        This is a generic method that handles the common pattern for all navigation tasks:
+        1. Check robot connection
+        2. Send gotargetlist command
+        3. Optionally wait for task completion
+        4. Report results
+        
+        Args:
+            move_task_list: List of waypoints/tasks to execute
+            description: Human-readable description of the navigation task
+            wait: If True, waits for task completion (blocking). If False, returns immediately after starting task (non-blocking).
+            timeout: Maximum time to wait for task completion in seconds (default: 600.0, only used if wait=True)
+            
+        Returns:
+            Dictionary with:
+            - success (bool): True if task started/completed successfully
+            - task_id (str): Task ID assigned by robot
+            - blocking (bool): Whether method waited for completion
+            - result (dict): Full result from wait_task_complete if wait=True, otherwise None
+        """
+        if not self.is_connected or self.robot is None:
+            print("❌ Robot not connected!")
+            return {"success": False, "task_id": None, "blocking": wait, "result": None}
+        
+        print(f"\n🚀 {description}")
+        
+        # Send gotargetlist command
+        result = self.robot.task.gotargetlist(move_task_list)
+        
+        if not result or result.get('ret_code') != 0:
+            print("❌ Failed to start task")
+            if result:
+                print(f"   Error code: {result.get('ret_code')}")
+                print(f"   Message: {result.get('msg', 'No error message')}")
+            return {"success": False, "task_id": None, "blocking": wait, "result": result}
+        
+        task_id = result.get('task_id', 'N/A')
+        print(f"✅ Task started (ID: {task_id})")
+        
+        # If non-blocking mode, return immediately
+        if not wait:
+            print("🔓 Non-blocking mode: returning immediately (task running in background)\n")
+            return {"success": True, "task_id": task_id, "blocking": False, "result": result}
+        
+        # Blocking mode: wait for completion
+        print(f"⏳ Waiting for completion (timeout: {timeout}s)...")
+        
+        # Wait for task completion
+        wait_result = self.robot.wait_task_complete(query_interval=1.0, timeout=timeout)
+        
+        # Display result
+        print(f"\n📊 Result: {wait_result['status_text']} in {wait_result['elapsed_time']:.1f}s")
+        
+        if wait_result['finished_path']:
+            print(f"   Path: {' → '.join(wait_result['finished_path'])}")
+        
+        if wait_result['success']:
+            print(f"✅ {description} completed successfully!\n")
+            return {"success": True, "task_id": task_id, "blocking": True, "result": wait_result}
+        else:
+            print(f"❌ {description} failed: {wait_result['status_text']}\n")
+            return {"success": False, "task_id": task_id, "blocking": True, "result": wait_result}
+        
+    def goto_start(self, move_task_list: List[Dict[str, Any]], wait: bool = True, timeout: float = 60.0) -> Dict[str, Any]:
         """
         Navigate to the starting position of a move task list.
         
@@ -716,6 +720,7 @@ class SmartSeerController:
         Args:
             move_task_list: List of waypoints/tasks (same format as execute_navigation)
             wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+            timeout: Maximum time to wait for navigation completion in seconds (default: 60.0, only used if wait=True)
             
         Returns:
             Dictionary with:
@@ -735,6 +740,9 @@ class SmartSeerController:
             
             # Non-blocking
             result = controller.goto_start(move_task_list, wait=False)  # Starts navigation to LM9, returns immediately
+            
+            # Custom timeout
+            result = controller.goto_start(move_task_list, timeout=120.0)
         """
         if not self.is_connected or self.robot is None:
             print("❌ Robot not connected!")
@@ -757,11 +765,11 @@ class SmartSeerController:
             return {"success": False, "task_id": None, "blocking": wait, "start_position": None}
         
         print(f"📍 Starting position identified: {start_position}")
-        result = self.goto(start_position, wait=wait)
+        result = self.goto(start_position, wait=wait, timeout=timeout)
         result["start_position"] = start_position
         return result
     
-    def goto_charge(self, via_point: str = "LM2", charge_point: str = "CP0", wait: bool = True) -> Dict[str, Any]:
+    def goto_charge(self, via_point: str = "LM2", charge_point: str = "CP0", wait: bool = True, timeout: float = 300.0) -> Dict[str, Any]:
         """
         Navigate robot to charging point.
         First checks if already charging. If not charging, goes via intermediate point to charge point.
@@ -770,6 +778,7 @@ class SmartSeerController:
             via_point: Intermediate waypoint before charging (default: "LM2")
             charge_point: Charging station ID (default: "CP0")
             wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+            timeout: Maximum time to wait for each navigation segment in seconds (default: 300.0, only used if wait=True)
         
         Returns:
             Dictionary with success status and task information
@@ -783,6 +792,9 @@ class SmartSeerController:
             
             # Non-blocking
             result = controller.goto_charge(wait=False)
+            
+            # Custom timeout
+            result = controller.goto_charge(timeout=600.0)
         """
         if not self.is_connected or self.robot is None:
             print("❌ Robot not connected!")
@@ -809,13 +821,13 @@ class SmartSeerController:
         print(f"📍 Not charging, navigating: {via_point} → {charge_point}")
         
         # First go to intermediate point
-        result = self.goto(via_point, wait=wait)
+        result = self.goto(via_point, wait=wait, timeout=timeout)
         if not result["success"]:
             print(f"❌ Failed to reach {via_point}")
             return result
         
         # Then go to charge point
-        result = self.goto(charge_point, wait=wait)
+        result = self.goto(charge_point, wait=wait, timeout=timeout)
         return result
 
 
