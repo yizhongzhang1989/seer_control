@@ -233,11 +233,36 @@
             color: #569cd6;
         }
 
+        #alertContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
         .alert {
-            padding: 12px 20px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            display: none;
+            padding: 15px 25px;
+            border-radius: 8px;
+            min-width: 300px;
+            max-width: 500px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease-out;
+            pointer-events: auto;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
 
         .alert.show {
@@ -247,13 +272,13 @@
         .alert-success {
             background: #d4edda;
             color: #155724;
-            border: 1px solid #c3e6cb;
+            border-left: 4px solid #28a745;
         }
 
         .alert-error {
             background: #f8d7da;
             color: #721c24;
-            border: 1px solid #f5c6cb;
+            border-left: 4px solid #dc3545;
         }
 
         @media (max-width: 768px) {
@@ -278,8 +303,6 @@
                 <button class="btn btn-danger" id="disconnectBtn" onclick="disconnectRobot()" style="display: none;">Disconnect</button>
             </div>
         </header>
-
-        <div id="alertContainer"></div>
 
         <div class="main-grid">
             <!-- Trajectory Control -->
@@ -334,6 +357,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Floating Alert Container -->
+    <div id="alertContainer"></div>
 
     <script>
         let connected = false;
@@ -624,10 +650,30 @@
             alert.textContent = message;
             container.appendChild(alert);
             
+            // Auto dismiss after 5 seconds with fade out
             setTimeout(() => {
-                alert.remove();
+                alert.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => {
+                    alert.remove();
+                }, 300);
             }, 5000);
         }
+
+        // Add slideOut animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideOut {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
 
         // Log message
         function log(message, type = 'info') {
