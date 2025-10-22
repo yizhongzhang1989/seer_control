@@ -424,8 +424,8 @@
                         <div class="status-value" id="taskStatusValue">--</div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">Idle Time</div>
-                        <div class="status-value" id="idleTimeValue">--</div>
+                        <div class="status-label">Jack State</div>
+                        <div class="status-value" id="jackStateValue">--</div>
                     </div>
                 </div>
             </div>
@@ -760,6 +760,20 @@
                 document.getElementById('taskStatusValue').textContent = 
                     statusMap[data.task_status] || "UNKNOWN";
             }
+
+            // Jack State
+            if (data.jack && data.jack.jack_state !== undefined) {
+                const jackStateMap = {
+                    0x00: "⬆️ Rising",
+                    0x01: "✅ Raised",
+                    0x02: "⬇️ Lowering",
+                    0x03: "✅ Lowered",
+                    0x04: "⏸️ Stopped",
+                    0xFF: "❌ Failed"
+                };
+                document.getElementById('jackStateValue').textContent = 
+                    jackStateMap[data.jack.jack_state] || "UNKNOWN";
+            }
         }
 
         // Poll push data from robot
@@ -794,27 +808,6 @@
                 pushDataInterval = null;
             }
         }
-
-        // Update idle time periodically
-        setInterval(async () => {
-            if (!connected) return;
-            
-            try {
-                const response = await fetch('/api/idle_time');
-                const data = await response.json();
-                
-                if (data.success && data.idle_time !== null) {
-                    const minutes = Math.floor(data.idle_time / 60);
-                    const seconds = Math.floor(data.idle_time % 60);
-                    document.getElementById('idleTimeValue').textContent = 
-                        `${minutes}m ${seconds}s`;
-                } else {
-                    document.getElementById('idleTimeValue').textContent = '--';
-                }
-            } catch (error) {
-                // Silently fail
-            }
-        }, 1000);
 
         // Show alert
         function showAlert(message, type) {

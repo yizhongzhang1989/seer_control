@@ -560,7 +560,7 @@ def main():
         
         result = controller.configure_push(
             interval=1000,
-            included_fields=['x', 'y', 'angle', 'vx', 'vy', 'w']
+            included_fields=['x', 'y', 'angle', 'vx', 'vy', 'w', 'jack']
         )
         
         if result and result.get('ret_code') == 0:

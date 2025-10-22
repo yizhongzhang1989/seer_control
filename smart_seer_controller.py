@@ -64,7 +64,8 @@ class SmartSeerController:
             "battery_level", "charging",
             "emergency", "soft_emc", "fatals", "errors", "warnings", "notices",
             "create_on", "confidence",
-            "task_status", "task_type"
+            "task_status", "task_type",
+            "jack"
         ]
         self._push_data: Dict[str, Any] = {}
         self._push_data_lock = threading.Lock()
