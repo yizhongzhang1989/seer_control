@@ -84,6 +84,41 @@
             padding-bottom: 10px;
         }
 
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .card-header h2 {
+            margin-bottom: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .soft-emc-indicator {
+            display: none;
+            background: #e74c3c;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            animation: blink 1s infinite;
+        }
+
+        .soft-emc-indicator.active {
+            display: inline-block;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
         .btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -371,7 +406,10 @@
         <div class="main-grid">
             <!-- Robot Status -->
             <div class="card">
-                <h2>📊 Robot Status</h2>
+                <div class="card-header">
+                    <h2>📊 Robot Status</h2>
+                    <span id="softEmcIndicator" class="soft-emc-indicator">🛑 Soft Emergency Stop</span>
+                </div>
                 <div class="status-grid">
                     <div class="status-item">
                         <div class="status-label">Position</div>
@@ -690,6 +728,14 @@
 
         // Update robot status from push data
         function updateRobotStatus(data) {
+            // Soft Emergency Stop indicator
+            const softEmcIndicator = document.getElementById('softEmcIndicator');
+            if (data.soft_emc === true) {
+                softEmcIndicator.classList.add('active');
+            } else {
+                softEmcIndicator.classList.remove('active');
+            }
+
             // Position
             if (data.current_station) {
                 document.getElementById('positionValue').textContent = data.current_station;
