@@ -36,9 +36,6 @@ class DCDemo2025Controller(SmartSeerController):
         # Basic usage
         controller = DCDemo2025Controller("192.168.1.123")
         if controller.connect():
-            # Use base methods
-            controller.print_status()
-            
             # Use DC-specific navigation with trajectory names
             controller.navigate("looptest")
             controller.navigate("arm_dock2rack", wait=False)
@@ -363,6 +360,51 @@ class DCDemo2025Controller(SmartSeerController):
         task_list = self._prepare_task_list(trajectory)
         result = self.execute_navigation(task_list, wait=wait, timeout=timeout)
         return result
+    
+    def goto_navigate_start(self, trajectory: str, wait: bool = True, timeout: float = 60.0) -> Dict[str, Any]:
+        """
+        Navigate to the starting position of a trajectory.
+        
+        This method finds the starting position of the specified trajectory
+        and navigates the robot there. This is useful for positioning the robot
+        at the correct starting location before executing the full trajectory.
+        
+        Args:
+            trajectory: Name of the trajectory. Available trajectories:
+                       - "looptest", "arm_dock2rack", "arm_rack2side", "arm_side2rack"
+                       - "arm_rack2dock", "courier_dock2rack", "courier_rack2dock"
+            wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+            timeout: Maximum time to wait for navigation completion in seconds (default: 60.0, only used if wait=True)
+        
+        Returns:
+            Dictionary with:
+            - success (bool): True if navigation to start position completed/started successfully
+            - task_id (str): Task ID assigned by robot
+            - blocking (bool): Whether method waited for completion
+            - start_position (str): The identified start position (None if not found)
+            
+        Examples:
+            # Navigate to starting position of looptest trajectory
+            result = controller.goto_navigate_start("looptest")
+            
+            # Then execute the trajectory
+            result = controller.navigate("looptest")
+            
+            # Non-blocking
+            result = controller.goto_navigate_start("arm_dock2rack", wait=False)
+        """
+        # Validate trajectory name
+        if trajectory not in self.move_task_list:
+            print(f"❌ Unknown trajectory: {trajectory}")
+            print(f"   Available trajectories: {list(self.move_task_list.keys())}")
+            return {"success": False, "task_id": None, "blocking": wait, "start_position": None}
+        
+        # Get the task list for this trajectory
+        task_list = self._prepare_task_list(trajectory)
+        
+        # Use goto_start to navigate to the starting position
+        result = self.goto_start(task_list, wait=wait, timeout=timeout)
+        return result
 
 
 # ============================================================================
@@ -391,12 +433,13 @@ def main():
         return
     
     print("\n📝 Available DC-specific commands:")
-    print("  - navigate trajectory=<name>  (unified navigation command)")
+    print("  - navigate trajectory=<name>  (execute full trajectory)")
+    print("  - goto_navigate_start trajectory=<name>  (go to trajectory start position)")
     print("\n📝 Available trajectories:")
     print("  - looptest, arm_dock2rack, arm_rack2side, arm_side2rack, arm_rack2dock")
     print("  - courier_dock2rack, courier_rack2dock")
     print("\n📝 Available base commands:")
-    print("  - goto, goto_charge, goto_start, status, print_status, print_push_data")
+    print("  - goto, goto_charge, goto_start, print_push_data")
     print("  - task_status, get_idle_time, get_push_data")
     print("\nType method names with parameters (e.g., goto target_id=LM2)")
     print("Type 'exit' or 'quit' to exit")
@@ -458,17 +501,14 @@ def main():
                 
                 elif func_name == 'help':
                     print("💡 Type any method name with parameters: method_name param1=value1 ...")
-                    print("   DC-specific: navigate trajectory=<name>")
+                    print("   DC-specific: navigate trajectory=<name>, goto_navigate_start trajectory=<name>")
                     print("   Trajectories: looptest, arm_dock2rack, arm_rack2side, arm_side2rack,")
                     print("                 arm_rack2dock, courier_dock2rack, courier_rack2dock")
-                    print("   Base methods: goto, goto_charge, goto_start, status, print_status, print_push_data")
+                    print("   Base methods: goto, goto_charge, goto_start, task_status, print_push_data")
+                    print("   Example: goto_navigate_start trajectory=looptest")
                     print("   Example: navigate trajectory=looptest")
                     print("   Example: navigate trajectory=arm_dock2rack wait=false")
                     print("   Example: goto target_id=LM2 timeout=120")
-                
-                # Special handling for status - use print_status() for formatted output
-                elif func_name == 'status':
-                    controller.print_status()
                 
                 # Special handling for task_status - print the status code
                 elif func_name == 'task_status':

@@ -34,15 +34,13 @@ class SmartSeerController:
         # Basic usage
         controller = SmartSeerController("192.168.1.123")
         if controller.connect():
-            status = controller.status()
-            print(f"Battery: {status.get('battery', {}).get('level')}%")
+            controller.goto("LM2")
             controller.disconnect()
         
         # Using context manager
         with SmartSeerController("192.168.1.123") as controller:
             if controller.is_connected:
-                status = controller.status()
-                print(status)
+                controller.goto("LM5")
     """
     
     def __init__(
@@ -216,160 +214,6 @@ class SmartSeerController:
         """
         with self._push_data_lock:
             self._push_data = data.copy()
-        
-    def status(self, detailed: bool = False) -> Dict[str, Any]:
-        """
-        Query current robot status.
-        
-        Retrieves comprehensive status information including position, battery,
-        task status, and version information.
-        
-        Args:
-            detailed: If True, returns raw query responses. If False, returns
-                     formatted summary (default: False)
-            
-        Returns:
-            Dictionary containing robot status information:
-            - position: {x, y, angle, current_station} or None if query failed
-            - battery: {level, charging} or None if query failed
-            - task: {status, status_text, target_id, target_dist} or None if query failed
-            - version: {software_version} or None if query failed
-            - connected: Connection status boolean
-            
-        Examples:
-            status = controller.status()
-            print(f"Position: ({status['position']['x']}, {status['position']['y']})")
-            print(f"Battery: {status['battery']['level']}%")
-            print(f"Task: {status['task']['status_text']}")
-            
-            # Get detailed raw responses
-            status = controller.status(detailed=True)
-            print(status['raw_position'])
-        """
-        result = {
-            "connected": self.is_connected,
-            "position": None,
-            "battery": None,
-            "task": None,
-            "version": None
-        }
-        
-        if not self.is_connected or self.robot is None:
-            return result
-        
-        try:
-            # Query position
-            loc = self.robot.status.query_status('loc')
-            if loc and loc.get('ret_code') == 0:
-                result["position"] = {
-                    "x": loc.get('x', 0.0),
-                    "y": loc.get('y', 0.0),
-                    "angle": loc.get('angle', 0.0),
-                    "current_station": loc.get('current_station', ''),
-                    "confidence": loc.get('confidence', 0.0)
-                }
-                if detailed:
-                    result["raw_position"] = loc
-            
-            # Query battery
-            battery = self.robot.status.query_status('battery')
-            if battery and battery.get('ret_code') == 0:
-                result["battery"] = {
-                    "level": battery.get('battery', 0),
-                    "charging": battery.get('charging', False)
-                }
-                if detailed:
-                    result["raw_battery"] = battery
-            
-            # Query task status
-            task = self.robot.status.query_status('task')
-            if task and task.get('ret_code') == 0:
-                task_status_code = task.get('task_status', -1)
-                status_map = {
-                    0: "NONE", 1: "WAITING", 2: "RUNNING", 3: "SUSPENDED",
-                    4: "COMPLETED", 5: "FAILED", 6: "CANCELED"
-                }
-                result["task"] = {
-                    "status": task_status_code,
-                    "status_text": status_map.get(task_status_code, "UNKNOWN"),
-                    "target_id": task.get('target_id', ''),
-                    "target_dist": task.get('target_dist', 0.0)
-                }
-                if detailed:
-                    result["raw_task"] = task
-            
-            # Query version
-            version = self.robot.status.query_status('version')
-            if version and version.get('ret_code') == 0:
-                result["version"] = {
-                    "software_version": version.get('software_version', 'N/A')
-                }
-                if detailed:
-                    result["raw_version"] = version
-                    
-        except Exception as e:
-            result["error"] = str(e)
-        
-        return result
-    
-    def print_status(self) -> bool:
-        """
-        Print formatted robot status to console.
-        
-        Displays a nicely formatted status report including position, battery,
-        task status, and version information.
-        
-        Returns:
-            True if status was retrieved and printed successfully
-            
-        Examples:
-            controller.print_status()
-        """
-        if not self.is_connected:
-            print("❌ Robot not connected! Connect first.")
-            return False
-        
-        status = self.status()
-        
-        print("\n" + "="*60)
-        print("🤖 Robot Status")
-        print("="*60)
-        
-        # Position
-        if status.get('position'):
-            pos = status['position']
-            print("\n📍 Position:")
-            print(f"  X: {pos['x']:.3f} m")
-            print(f"  Y: {pos['y']:.3f} m")
-            print(f"  Angle: {pos['angle']:.3f} rad")
-            if pos['current_station']:
-                print(f"  Station: {pos['current_station']}")
-            print(f"  Confidence: {pos['confidence']:.2f}")
-        
-        # Battery
-        if status.get('battery'):
-            bat = status['battery']
-            print("\n🔋 Battery:")
-            print(f"  Level: {bat['level']}%")
-            print(f"  Charging: {'Yes' if bat['charging'] else 'No'}")
-        
-        # Task
-        if status.get('task'):
-            task = status['task']
-            print("\n📊 Task Status:")
-            print(f"  Status: {task['status_text']} ({task['status']})")
-            if task['target_id']:
-                print(f"  Target: {task['target_id']}")
-                print(f"  Distance: {task['target_dist']:.2f} m")
-        
-        # Version
-        if status.get('version'):
-            ver = status['version']
-            print("\n📦 Version:")
-            print(f"  Software: {ver['software_version']}")
-        
-        print("="*60)
-        return True
     
     def __enter__(self):
         """Context manager entry - connects to robot."""
@@ -1010,12 +854,8 @@ def main():
                 
                 elif func_name == 'help':
                     print("💡 Type any method name with parameters: method_name param1=value1 ...")
-                    print("   Available methods: goto, goto_charge, goto_start, execute_navigation, status, task_status")
+                    print("   Available methods: goto, goto_charge, goto_start, execute_navigation, task_status")
                     print("   Example: goto target_id=LM2")
-                
-                # Special handling for status - use print_status() for formatted output
-                elif func_name == 'status':
-                    controller.print_status()
                 
                 # Special handling for task_status - print the status code
                 elif func_name == 'task_status':
