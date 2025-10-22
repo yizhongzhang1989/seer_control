@@ -12,6 +12,7 @@ Date: October 22, 2025
 
 from seer_control import SeerController
 from typing import Optional, Dict, Any, List
+import time
 import threading
 from datetime import datetime
 
@@ -74,6 +75,7 @@ class SmartSeerController:
         self._robot: Optional[SeerController] = None
         self._is_connected = False
         self._task_id_counter = 0
+        self.last_navigation_time: Optional[float] = None  # Timestamp of last navigation call (time.time())
     
     def connect(self, verbose: bool = True) -> bool:
         """
@@ -397,6 +399,30 @@ class SmartSeerController:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         return f"{timestamp}_{self._task_id_counter}"
     
+    def get_idle_time(self) -> Optional[float]:
+        """
+        Get the idle time since last navigation call.
+        
+        Calculates the time elapsed since the last navigation method was called.
+        This is useful for tracking robot idle time and scheduling decisions.
+        
+        Returns:
+            Time in seconds since last navigation call, or None if no navigation has been called yet
+            
+        Examples:
+            # Check idle time
+            idle_seconds = controller.get_idle_time()
+            if idle_seconds is not None:
+                print(f"Robot has been idle for {idle_seconds:.1f} seconds")
+                
+                # Check if idle for more than 5 minutes
+                if idle_seconds > 300:
+                    print("Robot idle for more than 5 minutes")
+        """
+        if self.last_navigation_time is None:
+            return None
+        return time.time() - self.last_navigation_time
+    
     def get_push_data(self) -> Dict[str, Any]:
         """
         Get the latest push data (thread-safe).
@@ -589,6 +615,9 @@ class SmartSeerController:
             print("❌ Robot not connected!")
             return {"success": False, "task_id": None, "blocking": wait, "already_at_target": False}
         
+        # Record navigation call time
+        self.last_navigation_time = time.time()
+        
         # Query current location first
         loc_result = self.robot.status.query_status("loc")
         
@@ -669,6 +698,9 @@ class SmartSeerController:
         if not self.is_connected or self.robot is None:
             print("❌ Robot not connected!")
             return {"success": False, "task_id": None, "blocking": wait, "result": None}
+        
+        # Record navigation call time
+        self.last_navigation_time = time.time()
         
         print(f"\n🚀 {description}")
         
