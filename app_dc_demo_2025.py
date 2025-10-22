@@ -426,6 +426,58 @@ def emergency_recover():
         }), 500
 
 
+@app.route('/api/goto_charge', methods=['POST'])
+def goto_charge():
+    """Navigate to charging station."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    data = request.json or {}
+    via_point = data.get('via_point', 'LM2')
+    charge_point = data.get('charge_point', 'CP0')
+    wait = data.get('wait', False)
+    timeout = data.get('timeout', 300.0)
+    
+    try:
+        result = ctrl.goto_charge(
+            via_point=via_point,
+            charge_point=charge_point,
+            wait=wait,
+            timeout=timeout
+        )
+        
+        if result.get('success', False):
+            # Check if already charging
+            if result.get('already_charging', False):
+                return jsonify({
+                    'success': True,
+                    'already_charging': True,
+                    'message': 'Robot is already charging'
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'task_id': result.get('task_id'),
+                    'message': f'Navigation to charge started (via {via_point} to {charge_point})'
+                })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to navigate to charge station'
+            }), 500
+    except Exception as e:
+        logger.error(f"Error navigating to charge: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
 # ============================================================================
 # Application Entry Point
 # ============================================================================

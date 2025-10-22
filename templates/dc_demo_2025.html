@@ -616,21 +616,26 @@
             try {
                 log('Going to charge station', 'info');
                 
-                // TODO: Implement the actual API call when backend is ready
-                showAlert('Go to charge - API not yet implemented', 'error');
-                log('Go to charge - API not yet implemented', 'error');
+                const response = await fetch('/api/goto_charge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ wait: false })
+                });
                 
-                // Placeholder for future implementation:
-                // const response = await fetch('/api/goto_charge', {
-                //     method: 'POST',
-                //     headers: { 'Content-Type': 'application/json' },
-                //     body: JSON.stringify({ wait: false })
-                // });
-                // const data = await response.json();
-                // if (data.success) {
-                //     showAlert(data.message, 'success');
-                //     log(`${data.message} (Task ID: ${data.task_id})`, 'success');
-                // }
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.already_charging) {
+                        showAlert('✅ ' + data.message, 'success');
+                        log(data.message, 'success');
+                    } else {
+                        showAlert('🔋 ' + data.message, 'success');
+                        log(`${data.message} (Task ID: ${data.task_id})`, 'success');
+                    }
+                } else {
+                    showAlert('Failed to go to charge: ' + data.message, 'error');
+                    log('Failed to go to charge: ' + data.message, 'error');
+                }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');
                 log('Error: ' + error.message, 'error');
