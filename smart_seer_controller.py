@@ -385,6 +385,66 @@ class SmartSeerController:
     # Utility Methods
     # ========================================================================
     
+    def gen_move_task_list_description(self, move_task_list: List[Dict[str, Any]]) -> str:
+        """
+        Generate a human-readable description from a move task list.
+        
+        Extracts station/point IDs and operations to create a concise description
+        of the navigation path. Handles various task formats flexibly.
+        
+        Args:
+            move_task_list: List of waypoints/tasks
+            
+        Returns:
+            String description like "LM2 → LM9 → LM5" or "LM9 → AP8 (load) → LM9"
+            
+        Examples:
+            >>> tasks = [{"source_id": "LM2", "id": "LM9"}, {"source_id": "LM9", "id": "LM5"}]
+            >>> controller.gen_move_task_list_description(tasks)
+            'LM2 → LM9 → LM5'
+            
+            >>> tasks = [{"source_id": "LM9", "id": "AP8", "operation": "JackLoad"}]
+            >>> controller.gen_move_task_list_description(tasks)
+            'LM9 → AP8 (load)'
+        """
+        if not move_task_list:
+            return "Empty task list"
+        
+        path_parts = []
+        previous_id = None
+        
+        for task in move_task_list:
+            # Get source and destination
+            source_id = task.get('source_id', '')
+            dest_id = task.get('id', '')
+            operation = task.get('operation', '')
+            
+            # Skip SELF_POSITION entries in the path
+            if source_id == 'SELF_POSITION' and dest_id == 'SELF_POSITION':
+                continue
+            
+            # Add source to path if it's the first or different from previous
+            if source_id and source_id != 'SELF_POSITION' and source_id != previous_id:
+                path_parts.append(source_id)
+                previous_id = source_id
+            
+            # Add destination to path
+            if dest_id and dest_id != 'SELF_POSITION':
+                # Add operation annotation if present
+                if operation:
+                    # Simplify operation name (e.g., "JackLoad" -> "load")
+                    op_name = operation.replace('Jack', '').lower()
+                    path_parts.append(f"{dest_id} ({op_name})")
+                else:
+                    path_parts.append(dest_id)
+                previous_id = dest_id
+        
+        # Join with arrow symbol
+        if path_parts:
+            return ' → '.join(path_parts)
+        else:
+            return "Navigation task"
+    
     def _task_id_gen(self) -> str:
         """
         Generate a unique task ID.
@@ -672,7 +732,7 @@ class SmartSeerController:
             print(f"❌ Navigation to {target_id} failed: {wait_result['status_text']}\n")
             return {"success": False, "task_id": task_id, "blocking": True, "already_at_target": False}
 
-    def execute_navigation(self, move_task_list: List[Dict[str, Any]], description: str, wait: bool = True, timeout: float = 600.0) -> Dict[str, Any]:
+    def execute_navigation(self, move_task_list: List[Dict[str, Any]], wait: bool = True, timeout: float = 600.0) -> Dict[str, Any]:
         """
         Execute a navigation task with a given move task list.
         
@@ -684,7 +744,6 @@ class SmartSeerController:
         
         Args:
             move_task_list: List of waypoints/tasks to execute
-            description: Human-readable description of the navigation task
             wait: If True, waits for task completion (blocking). If False, returns immediately after starting task (non-blocking).
             timeout: Maximum time to wait for task completion in seconds (default: 600.0, only used if wait=True)
             
@@ -701,6 +760,9 @@ class SmartSeerController:
         
         # Record navigation call time
         self.last_navigation_time = time.time()
+        
+        # Auto-generate description from task list
+        description = self.gen_move_task_list_description(move_task_list)
         
         print(f"\n🚀 {description}")
         
@@ -878,8 +940,8 @@ def main():
     print("🤖 Smart SEER Controller - Interactive Control")
     print("="*60)
     
-    # Get robot IP
-    robot_ip = input("\nEnter robot IP [192.168.1.123]: ").strip() or "192.168.1.123"
+    # Set robot IP directly
+    robot_ip = "192.168.1.123"
     
     # Auto-connect at start
     print("\n🔌 Connecting to robot...")
