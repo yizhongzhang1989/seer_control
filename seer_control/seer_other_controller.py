@@ -487,7 +487,7 @@ class SeerOtherController(SeerControllerBase):
             timeout=5.0
         )
     
-    def softemc(self) -> Optional[Dict[str, Any]]:
+    def softemc(self, status=True) -> Optional[Dict[str, Any]]:
         """
         Soft emergency stop - Trigger soft emergency stop.
         
@@ -501,7 +501,7 @@ class SeerOtherController(SeerControllerBase):
         return self.send_command(
             req_id=1,
             msg_type=req_id,
-            msg={},  # Empty payload
+            msg={"status": status},
             expected_response=resp_id,
             timeout=5.0
         )
