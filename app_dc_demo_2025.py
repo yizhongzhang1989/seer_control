@@ -478,6 +478,102 @@ def goto_charge():
         }), 500
 
 
+@app.route('/api/pause_task', methods=['POST'])
+def pause_task():
+    """Pause the current task."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    try:
+        result = ctrl.robot.task.pause()
+        
+        if result.get('ret_code') == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Task paused successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f"Failed to pause task (code: {result.get('ret_code')})"
+            }), 500
+    except Exception as e:
+        logger.error(f"Error pausing task: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/resume_task', methods=['POST'])
+def resume_task():
+    """Resume the current task."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    try:
+        result = ctrl.robot.task.resume()
+        
+        if result.get('ret_code') == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Task resumed successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f"Failed to resume task (code: {result.get('ret_code')})"
+            }), 500
+    except Exception as e:
+        logger.error(f"Error resuming task: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/cancel_task', methods=['POST'])
+def cancel_task():
+    """Cancel the current task."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    try:
+        result = ctrl.robot.task.cancel()
+        
+        if result.get('ret_code') == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Task canceled successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f"Failed to cancel task (code: {result.get('ret_code')})"
+            }), 500
+    except Exception as e:
+        logger.error(f"Error canceling task: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
 # ============================================================================
 # Application Entry Point
 # ============================================================================

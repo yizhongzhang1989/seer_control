@@ -159,6 +159,10 @@
             background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
         }
 
+        .btn-info {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        }
+
         .btn-emergency {
             background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%);
             font-size: 18px;
@@ -400,6 +404,18 @@
                 <button class="btn btn-warning" onclick="gotoCharge()" id="gotoChargeBtn" disabled>
                     🔋 Go to Charge
                 </button>
+                <div style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 15px;">
+                    <h3 style="font-size: 16px; margin-bottom: 10px;">Task Controls</h3>
+                    <button class="btn btn-info" onclick="pauseTask()" id="pauseBtn" disabled>
+                        ⏸️ Pause
+                    </button>
+                    <button class="btn btn-success" onclick="resumeTask()" id="resumeBtn" disabled>
+                        ▶️ Resume
+                    </button>
+                    <button class="btn btn-danger" onclick="cancelTask()" id="cancelBtn" disabled>
+                        ❌ Cancel
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -460,6 +476,9 @@
             const gotoChargeBtn = document.getElementById('gotoChargeBtn');
             const emergencyStopBtn = document.getElementById('emergencyStopBtn');
             const recoverBtn = document.getElementById('recoverBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const resumeBtn = document.getElementById('resumeBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
 
             if (isConnected) {
                 indicator.classList.add('connected');
@@ -471,6 +490,9 @@
                 gotoChargeBtn.disabled = false;
                 emergencyStopBtn.disabled = false;
                 recoverBtn.disabled = false;
+                pauseBtn.disabled = false;
+                resumeBtn.disabled = false;
+                cancelBtn.disabled = false;
             } else {
                 indicator.classList.remove('connected');
                 statusText.textContent = 'Disconnected';
@@ -481,6 +503,9 @@
                 gotoChargeBtn.disabled = true;
                 emergencyStopBtn.disabled = true;
                 recoverBtn.disabled = true;
+                pauseBtn.disabled = true;
+                resumeBtn.disabled = true;
+                cancelBtn.disabled = true;
             }
         }
 
@@ -673,6 +698,75 @@
                 } else {
                     showAlert('Failed to go to charge: ' + data.message, 'error');
                     log('Failed to go to charge: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                log('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Pause task
+        async function pauseTask() {
+            try {
+                log('⏸️ Pausing current task...', 'info');
+                
+                const response = await fetch('/api/pause_task', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('⏸️ ' + data.message, 'success');
+                    log(data.message, 'success');
+                } else {
+                    showAlert('Failed to pause task: ' + data.message, 'error');
+                    log('Failed to pause task: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                log('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Resume task
+        async function resumeTask() {
+            try {
+                log('▶️ Resuming current task...', 'info');
+                
+                const response = await fetch('/api/resume_task', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('▶️ ' + data.message, 'success');
+                    log(data.message, 'success');
+                } else {
+                    showAlert('Failed to resume task: ' + data.message, 'error');
+                    log('Failed to resume task: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                log('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Cancel task
+        async function cancelTask() {
+            try {
+                log('❌ Canceling current task...', 'info');
+                
+                const response = await fetch('/api/cancel_task', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('❌ ' + data.message, 'success');
+                    log(data.message, 'success');
+                } else {
+                    showAlert('Failed to cancel task: ' + data.message, 'error');
+                    log('Failed to cancel task: ' + data.message, 'error');
                 }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');
