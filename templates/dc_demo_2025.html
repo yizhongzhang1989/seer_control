@@ -125,15 +125,28 @@
         }
 
         .trajectory-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            display: flex;
+            flex-direction: column;
             gap: 10px;
             margin-top: 15px;
+        }
+
+        .trajectory-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 10px;
+            align-items: center;
         }
 
         .trajectory-btn {
             width: 100%;
             text-align: left;
+        }
+
+        .goto-start-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            font-size: 13px;
         }
 
         .input-group {
@@ -275,10 +288,6 @@
                 <div class="trajectory-grid" id="trajectoryGrid">
                     <button class="btn trajectory-btn" disabled>Loading...</button>
                 </div>
-                <hr style="margin: 20px 0;">
-                <button class="btn btn-warning" onclick="goToStartPosition()" id="gotoStartBtn" disabled>
-                    📌 Go to Start Position
-                </button>
             </div>
 
             <!-- Manual Navigation -->
@@ -328,7 +337,6 @@
 
     <script>
         let connected = false;
-        let selectedTrajectory = null;
         let pushDataInterval = null;
 
         // Initialize - check status on page load
@@ -343,7 +351,6 @@
             const disconnectBtn = document.getElementById('disconnectBtn');
             const trajectoryBtns = document.querySelectorAll('.trajectory-btn');
             const gotoBtn = document.getElementById('gotoBtn');
-            const gotoStartBtn = document.getElementById('gotoStartBtn');
 
             if (isConnected) {
                 indicator.classList.add('connected');
@@ -352,7 +359,6 @@
                 disconnectBtn.style.display = 'inline-block';
                 trajectoryBtns.forEach(btn => btn.disabled = false);
                 gotoBtn.disabled = false;
-                gotoStartBtn.disabled = false;
             } else {
                 indicator.classList.remove('connected');
                 statusText.textContent = 'Disconnected';
@@ -360,7 +366,6 @@
                 disconnectBtn.style.display = 'none';
                 trajectoryBtns.forEach(btn => btn.disabled = true);
                 gotoBtn.disabled = true;
-                gotoStartBtn.disabled = true;
             }
         }
 
@@ -418,11 +423,25 @@
                     grid.innerHTML = '';
                     
                     data.trajectories.forEach(traj => {
-                        const btn = document.createElement('button');
-                        btn.className = 'btn trajectory-btn';
-                        btn.textContent = traj;
-                        btn.onclick = () => executeTrajectory(traj);
-                        grid.appendChild(btn);
+                        // Create a row for each trajectory
+                        const row = document.createElement('div');
+                        row.className = 'trajectory-row';
+                        
+                        // Navigate button (left)
+                        const navBtn = document.createElement('button');
+                        navBtn.className = 'btn trajectory-btn';
+                        navBtn.textContent = traj;
+                        navBtn.onclick = () => executeTrajectory(traj);
+                        
+                        // Goto start button (right)
+                        const gotoBtn = document.createElement('button');
+                        gotoBtn.className = 'btn goto-start-btn';
+                        gotoBtn.textContent = '📍 Go to Start';
+                        gotoBtn.onclick = () => gotoTrajectoryStart(traj);
+                        
+                        row.appendChild(navBtn);
+                        row.appendChild(gotoBtn);
+                        grid.appendChild(row);
                     });
                 }
             } catch (error) {
@@ -433,7 +452,6 @@
         // Execute trajectory
         async function executeTrajectory(trajectory) {
             try {
-                selectedTrajectory = trajectory;
                 log(`Executing trajectory: ${trajectory}`, 'info');
                 
                 const response = await fetch('/api/navigate', {
@@ -457,20 +475,15 @@
             }
         }
 
-        // Go to start position
-        async function goToStartPosition() {
-            if (!selectedTrajectory) {
-                showAlert('Please select a trajectory first', 'error');
-                return;
-            }
-
+        // Go to trajectory start position (called from button)
+        async function gotoTrajectoryStart(trajectory) {
             try {
-                log(`Going to start position of: ${selectedTrajectory}`, 'info');
+                log(`Going to start position of: ${trajectory}`, 'info');
                 
                 const response = await fetch('/api/goto_navigate_start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ trajectory: selectedTrajectory, wait: false })
+                    body: JSON.stringify({ trajectory: trajectory, wait: false })
                 });
                 
                 const data = await response.json();
