@@ -50,12 +50,14 @@ def packMasg(reqId, msgType, msg={}):
     if (msg != {}):
         msgLen = len(jsonStr)
     rawMsg = struct.pack(PACK_FMT_STR, 0x5A, 0x01, reqId, msgLen, msgType, b'\x00\x00\x00\x00\x00\x00')
-    print("{:02X} {:02X} {:04X} {:08X} {:04X}"
-    .format(0x5A, 0x01, reqId, msgLen, msgType))
+    # Debug print - commented out to reduce console output
+    # print("{:02X} {:02X} {:04X} {:08X} {:04X}"
+    # .format(0x5A, 0x01, reqId, msgLen, msgType))
 
     if (msg != {}):
         rawMsg += bytearray(jsonStr,'ascii')
-        print(msg)
+        # Debug print - commented out to reduce console output
+        # print(msg)
 
     return rawMsg
 

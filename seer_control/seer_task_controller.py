@@ -26,7 +26,10 @@ Date: October 18, 2025
 
 import time
 from typing import Optional, Dict, Any, List
-from .seer_controller_base import SeerControllerBase
+try:
+    from .seer_controller_base import SeerControllerBase
+except ImportError:
+    from seer_controller_base import SeerControllerBase
 
 
 # Task control command IDs
