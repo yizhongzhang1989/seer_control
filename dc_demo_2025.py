@@ -14,6 +14,7 @@ Date: October 21, 2025
 """
 
 from seer_control import SeerController
+from seer_control.util import parse_command_line
 import json
 import time
 from datetime import datetime
@@ -22,7 +23,7 @@ from typing import Optional, List, Dict, Any
 
 # ============================================================================
 # Global Variables
-# ============================================================================
+# =============================================================================
 
 # Global robot controller instance
 robot: Optional[SeerController] = None
@@ -31,7 +32,7 @@ robot: Optional[SeerController] = None
 _task_id_counter = 0
 
 
-# ============================================================================
+# ===========================================================================
 # Utility Functions
 # ============================================================================
 
@@ -159,26 +160,72 @@ def status() -> bool:
 # Generic Navigation Execution Function
 # ============================================================================
 
-def execute_navigation(move_task_list: List[Dict[str, Any]], description: str) -> bool:
+def task_status() -> int:
+    """
+    Query the status of the current running task.
+    
+    This function is useful for non-blocking workflows where you start a task
+    and then periodically check its status until completion.
+    
+    Returns:
+        Task status code:
+        - 0: NONE (no task)
+        - 1: WAITING
+        - 2: RUNNING
+        - 3: SUSPENDED
+        - 4: COMPLETED
+        - 5: FAILED
+        - 6: CANCELED
+        - -1: Error (robot not connected or query failed)
+        
+    Examples:
+        # Start a non-blocking task
+        result = execute_navigation(task_list, "My Task", wait=False)
+        
+        # Check status periodically
+        while True:
+            status = task_status()
+            if status in [4, 5, 6]:  # COMPLETED, FAILED, or CANCELED
+                break
+            time.sleep(1)
+    """
+    if robot is None:
+        return -1
+    
+    # Query task status
+    result = robot.status.query_status('task')
+    
+    if not result or result.get('ret_code') != 0:
+        return -1
+    
+    return result.get('task_status', -1)
+
+
+def execute_navigation(move_task_list: List[Dict[str, Any]], description: str, wait: bool = True) -> Dict[str, Any]:
     """
     Execute a navigation task with a given move task list.
     
     This is a generic function that handles the common pattern for all navigation tasks:
     1. Check robot connection
     2. Send gotargetlist command
-    3. Wait for task completion
+    3. Optionally wait for task completion
     4. Report results
     
     Args:
         move_task_list: List of waypoints/tasks to execute
         description: Human-readable description of the navigation task
+        wait: If True, waits for task completion (blocking). If False, returns immediately after starting task (non-blocking).
         
     Returns:
-        True if task completed successfully, False otherwise
+        Dictionary with:
+        - success (bool): True if task started/completed successfully
+        - task_id (str): Task ID assigned by robot
+        - blocking (bool): Whether function waited for completion
+        - result (dict): Full result from wait_task_complete if wait=True, otherwise None
     """
     if robot is None:
         print("❌ Robot not connected!")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait, "result": None}
     
     print(f"\n🚀 {description}")
     
@@ -190,9 +237,17 @@ def execute_navigation(move_task_list: List[Dict[str, Any]], description: str) -
         if result:
             print(f"   Error code: {result.get('ret_code')}")
             print(f"   Message: {result.get('msg', 'No error message')}")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait, "result": result}
     
-    print(f"✅ Task started (ID: {result.get('task_id', 'N/A')})")
+    task_id = result.get('task_id', 'N/A')
+    print(f"✅ Task started (ID: {task_id})")
+    
+    # If non-blocking mode, return immediately
+    if not wait:
+        print("🔓 Non-blocking mode: returning immediately (task running in background)\n")
+        return {"success": True, "task_id": task_id, "blocking": False, "result": result}
+    
+    # Blocking mode: wait for completion
     print("⏳ Waiting for completion...")
     
     # Wait for task completion
@@ -206,13 +261,13 @@ def execute_navigation(move_task_list: List[Dict[str, Any]], description: str) -
     
     if wait_result['success']:
         print(f"✅ {description} completed successfully!\n")
-        return True
+        return {"success": True, "task_id": task_id, "blocking": True, "result": wait_result}
     else:
         print(f"❌ {description} failed: {wait_result['status_text']}\n")
-        return False
+        return {"success": False, "task_id": task_id, "blocking": True, "result": wait_result}
 
 
-def goto(target_id: str) -> bool:
+def goto(target_id: str, wait: bool = True) -> Dict[str, Any]:
     """
     Simple navigation to a target point - Navigate robot to target by ID.
     
@@ -222,20 +277,29 @@ def goto(target_id: str) -> bool:
     
     Args:
         target_id: Target station/point name (e.g., "LM2", "AP1", "Station5")
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
         
     Returns:
-        True if already at target or navigation completed successfully, False otherwise
+        Dictionary with:
+        - success (bool): True if already at target or navigation started/completed successfully
+        - task_id (str): Task ID assigned by robot (None if already at target or failed)
+        - blocking (bool): Whether function waited for completion
+        - already_at_target (bool): Whether robot was already at target location
         
     Examples:
-        # Navigate to a landmark
-        goto("LM2")
+        # Blocking navigation (default)
+        result = goto("LM2")
+        if result["success"]:
+            print("Navigation completed!")
         
-        # Navigate to an action point
-        goto("AP1")
+        # Non-blocking navigation
+        result = goto("AP1", wait=False)
+        task_id = result["task_id"]
+        # Check status later with task_status()
     """
     if robot is None:
         print("❌ Robot not connected!")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait, "already_at_target": False}
     
     # Query current location first
     loc_result = robot.status.query_status("loc")
@@ -250,7 +314,7 @@ def goto(target_id: str) -> bool:
     # Check if already at target
     if current_station and current_station == target_id:
         print(f"✅ Already at {target_id}, skipping navigation\n")
-        return True
+        return {"success": True, "task_id": None, "blocking": wait, "already_at_target": True}
     
     print(f"🎯 Navigating to: {target_id}")
     
@@ -262,9 +326,17 @@ def goto(target_id: str) -> bool:
         if result:
             print(f"   Error code: {result.get('ret_code')}")
             print(f"   Message: {result.get('msg', 'No error message')}")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait, "already_at_target": False}
     
-    print(f"✅ Navigation started (ID: {result.get('task_id', 'N/A')})")
+    task_id = result.get('task_id', 'N/A')
+    print(f"✅ Navigation started (ID: {task_id})")
+    
+    # If non-blocking mode, return immediately
+    if not wait:
+        print("🔓 Non-blocking mode: returning immediately (navigation running in background)\n")
+        return {"success": True, "task_id": task_id, "blocking": False, "already_at_target": False}
+    
+    # Blocking mode: wait for completion
     print("⏳ Waiting for completion...")
     
     # Wait for task completion
@@ -278,13 +350,13 @@ def goto(target_id: str) -> bool:
     
     if wait_result['success']:
         print(f"✅ Arrived at {target_id}!\n")
-        return True
+        return {"success": True, "task_id": task_id, "blocking": True, "already_at_target": False}
     else:
         print(f"❌ Navigation to {target_id} failed: {wait_result['status_text']}\n")
-        return False
+        return {"success": False, "task_id": task_id, "blocking": True, "already_at_target": False}
 
 
-def goto_start(move_task_list: List[Dict[str, Any]]) -> bool:
+def goto_start(move_task_list: List[Dict[str, Any]], wait: bool = True) -> Dict[str, Any]:
     """
     Navigate to the starting position of a move task list.
     
@@ -294,34 +366,34 @@ def goto_start(move_task_list: List[Dict[str, Any]]) -> bool:
     
     Args:
         move_task_list: List of waypoints/tasks (same format as execute_navigation)
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
         
     Returns:
-        True if navigation to start position completed successfully, False otherwise
+        Dictionary with:
+        - success (bool): True if navigation to start position completed/started successfully
+        - task_id (str): Task ID assigned by robot
+        - blocking (bool): Whether function waited for completion
+        - start_position (str): The identified start position (None if not found)
         
     Examples:
-        # Navigate to starting position before running arm_dock2rack
+        # Blocking (default)
         move_task_list = [
             {"source_id": "LM9", "id": "AP8", "task_id": "001", "operation": "JackLoad"},
             {"source_id": "AP8", "id": "LM9", "task_id": "002"},
             ...
         ]
-        goto_start(move_task_list)  # Will navigate to LM9
+        result = goto_start(move_task_list)  # Will navigate to LM9 and wait
         
-        # If first source_id is SELF_POSITION, finds next non-SELF_POSITION
-        move_task_list = [
-            {"source_id": "SELF_POSITION", "id": "SELF_POSITION", "task_id": "001"},
-            {"source_id": "AP10", "id": "LM12", "task_id": "002"},
-            ...
-        ]
-        goto_start(move_task_list)  # Will navigate to AP10
+        # Non-blocking
+        result = goto_start(move_task_list, wait=False)  # Starts navigation to LM9, returns immediately
     """
     if robot is None:
         print("❌ Robot not connected!")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait, "start_position": None}
     
     if not move_task_list:
         print("❌ Empty move task list!")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait, "start_position": None}
     
     # Find the first source_id that is not SELF_POSITION
     start_position = None
@@ -333,22 +405,27 @@ def goto_start(move_task_list: List[Dict[str, Any]]) -> bool:
     
     if not start_position:
         print("⚠️ No valid starting position found in move task list (all are SELF_POSITION)")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait, "start_position": None}
     
     print(f"📍 Starting position identified: {start_position}")
-    return goto(start_position)
+    result = goto(start_position, wait=wait)
+    result["start_position"] = start_position
+    return result
 
 
 # ============================================================================
 # Navigation Functions for DC Robot
 # ============================================================================
 
-def looptest() -> bool:
+def looptest(wait: bool = True) -> Dict[str, Any]:
     """
     Execute a loop test navigating through multiple stations: LM2 -> LM9 -> LM5 -> LM2.
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if loop test completed successfully
+        Dictionary with success status and task information
     """
     # Define the move task list: LM2 -> LM9 -> LM5 -> LM2
     move_task_list = [
@@ -370,23 +447,28 @@ def looptest() -> bool:
     ]
     
     # Move to start position
-    if not goto_start(move_task_list):
-        return False
+    start_result = goto_start(move_task_list, wait=wait)
+    if not start_result["success"]:
+        return start_result
     
-    return execute_navigation(move_task_list, "Loop Test: LM2 → LM9 → LM5 → LM2")
+    result = execute_navigation(move_task_list, "Loop Test: LM2 → LM9 → LM5 → LM2", wait=wait)
+    return result
 
 
-def goto_charge() -> bool:
+def goto_charge(wait: bool = True) -> Dict[str, Any]:
     """
     Navigate robot to charging point CP0.
     First checks if already charging. If not charging, goes via LM2 to CP0.
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if navigation to charging point completed successfully or already charging
+        Dictionary with success status and task information
     """
     if robot is None:
         print("❌ Robot not connected!")
-        return False
+        return {"success": False, "task_id": None, "blocking": wait}
     
     # Check battery status to see if already charging
     print("🔋 Checking charging status...")
@@ -403,31 +485,37 @@ def goto_charge() -> bool:
     # If already charging, no need to move
     if is_charging:
         print("✅ Already charging, no navigation needed\n")
-        return True
+        return {"success": True, "task_id": None, "blocking": wait, "already_charging": True}
     
     # Not charging, go via LM2 to CP0
     print("📍 Not charging, navigating: LM2 → CP0")
     
     # First go to LM2
-    if not goto("LM2"):
+    result = goto("LM2", wait=wait)
+    if not result["success"]:
         print("❌ Failed to reach LM2")
-        return False
+        return result
     
     # Then go to CP0
-    if not goto("CP0"):
+    result = goto("CP0", wait=wait)
+    if not result["success"]:
         print("❌ Failed to reach CP0")
-        return False
+        return result
     
-    print("✅ Successfully reached charging point!\n")
-    return True
+    if wait:
+        print("✅ Successfully reached charging point!\n")
+    return result
 
 
-def arm_dock2rack() -> bool:
+def arm_dock2rack(wait: bool = True) -> Dict[str, Any]:
     """
     Move from dock to rack: LM9 -> AP8 (load) -> LM9 -> LM5 -> AP10 (unload).
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if task completed successfully
+        Dictionary with success status and task information
     """
     # Define the move task list
     move_task_list = [
@@ -459,18 +547,23 @@ def arm_dock2rack() -> bool:
     ]
     
     # Move to start position
-    if not goto_start(move_task_list):
-        return False
+    start_result = goto_start(move_task_list, wait=wait)
+    if not start_result["success"]:
+        return start_result
     
-    return execute_navigation(move_task_list, "Dock to Rack: LM9 → AP8 (load) → LM9 → LM5 → AP10 (unload)")
+    result = execute_navigation(move_task_list, "Dock to Rack: LM9 → AP8 (load) → LM9 → LM5 → AP10 (unload)", wait=wait)
+    return result
 
 
-def arm_rack2side() -> bool:
+def arm_rack2side(wait: bool = True) -> Dict[str, Any]:
     """
     Move from rack to side: AP10 (load) -> LM12 -> AP11 (unload).
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if task completed successfully
+        Dictionary with success status and task information
     """
     # Define the move task list
     move_task_list = [
@@ -506,18 +599,23 @@ def arm_rack2side() -> bool:
     ]
     
     # Move to start position
-    if not goto_start(move_task_list):
-        return False
+    start_result = goto_start(move_task_list, wait=wait)
+    if not start_result["success"]:
+        return start_result
     
-    return execute_navigation(move_task_list, "Rack to Side: AP10 (load) → LM12 → AP11 (unload)")
+    result = execute_navigation(move_task_list, "Rack to Side: AP10 (load) → LM12 → AP11 (unload)", wait=wait)
+    return result
 
 
-def arm_side2rack() -> bool:
+def arm_side2rack(wait: bool = True) -> Dict[str, Any]:
     """
     Move from side to rack: AP11 (load) -> LM12 -> AP10 (unload).
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if task completed successfully
+        Dictionary with success status and task information
     """
     # Define the move task list
     move_task_list = [
@@ -572,18 +670,23 @@ def arm_side2rack() -> bool:
     ]
     
     # Move to start position
-    if not goto_start(move_task_list):
-        return False
+    start_result = goto_start(move_task_list, wait=wait)
+    if not start_result["success"]:
+        return start_result
     
-    return execute_navigation(move_task_list, "Side to Rack: AP11 (load) → LM12 → AP10 (unload)")
+    result = execute_navigation(move_task_list, "Side to Rack: AP11 (load) → LM12 → AP10 (unload)", wait=wait)
+    return result
 
 
-def arm_rack2dock() -> bool:
+def arm_rack2dock(wait: bool = True) -> Dict[str, Any]:
     """
     Move from rack to dock: AP10 (load) -> LM5 -> LM9 -> AP8 (unload) -> LM9.
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if task completed successfully
+        Dictionary with success status and task information
     """
     # Define the move task list
     move_task_list = [
@@ -619,18 +722,23 @@ def arm_rack2dock() -> bool:
     ]
     
     # Move to start position
-    if not goto_start(move_task_list):
-        return False
+    start_result = goto_start(move_task_list, wait=wait)
+    if not start_result["success"]:
+        return start_result
     
-    return execute_navigation(move_task_list, "Rack to Dock: AP10 (load) → LM5 → LM9 → AP8 (unload) → LM9")
+    result = execute_navigation(move_task_list, "Rack to Dock: AP10 (load) → LM5 → LM9 → AP8 (unload) → LM9", wait=wait)
+    return result
 
 
-def courier_dock2rack() -> bool:
+def courier_dock2rack(wait: bool = True) -> Dict[str, Any]:
     """
     Courier movement from dock to rack: LM4 -> AP3 (load) -> LM4 -> LM5 -> AP7 (unload).
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if task completed successfully
+        Dictionary with success status and task information
     """
     # Define the move task list
     move_task_list = [
@@ -671,18 +779,23 @@ def courier_dock2rack() -> bool:
     ]
     
     # Move to start position
-    if not goto_start(move_task_list):
-        return False
+    start_result = goto_start(move_task_list, wait=wait)
+    if not start_result["success"]:
+        return start_result
     
-    return execute_navigation(move_task_list, "Courier Dock to Rack: LM4 → AP3 (load) → LM4 → LM5 → AP7 (unload)")
+    result = execute_navigation(move_task_list, "Courier Dock to Rack: LM4 → AP3 (load) → LM4 → LM5 → AP7 (unload)", wait=wait)
+    return result
 
 
-def courier_rack2dock() -> bool:
+def courier_rack2dock(wait: bool = True) -> Dict[str, Any]:
     """
     Courier movement from rack to dock: Self (load) -> LM5 -> LM4 -> AP3 (unload) -> LM4.
     
+    Args:
+        wait: If True, waits for navigation completion (blocking). If False, returns immediately after starting (non-blocking).
+    
     Returns:
-        True if task completed successfully
+        Dictionary with success status and task information
     """
     # Define the move task list
     move_task_list = [
@@ -718,10 +831,12 @@ def courier_rack2dock() -> bool:
     ]
     
     # Move to start position
-    if not goto_start(move_task_list):
-        return False
+    start_result = goto_start(move_task_list, wait=wait)
+    if not start_result["success"]:
+        return start_result
     
-    return execute_navigation(move_task_list, "Courier Rack to Dock: Self (load) → LM5 → LM4 → AP3 (unload) → LM4")    
+    result = execute_navigation(move_task_list, "Courier Rack to Dock: Self (load) → LM5 → LM4 → AP3 (unload) → LM4", wait=wait)
+    return result    
 
 # ============================================================================
 # Interactive Command Interface
@@ -736,8 +851,9 @@ def print_help():
     print("  looptest               - Run loop test (LM2 -> LM9 -> LM5 -> LM2)")
     print("  goto_charge            - Navigate to charging point CP0")
     print("                           (checks charging status, goes via LM2 if needed)")
-    print("  goto <target_id>       - Navigate to a target point by ID")
-    print("                           (e.g., goto LM2, goto AP1)")
+    print("  goto target_id=<ID>    - Navigate to a target point by ID")
+    print("                           Example: goto target_id=LM2")
+    print("                           With wait: goto target_id=LM2 wait=false")
     
     print("\n🦾 Arm Movement Commands:")
     print("  arm_dock2rack          - Move from dock to rack")
@@ -757,35 +873,21 @@ def print_help():
     
     print("\n📊 Information:")
     print("  status                 - Display current robot status")
+    print("  task_status            - Get current task status code")
     
     print("\n❓ Other:")
     print("  help                   - Show this help message")
     print("  exit / quit            - Exit program and disconnect")
 
     
+    print("\n💡 Command Format:")
+    print("  function_name param1=value1 param2=value2 ...")
+    print("  Parameters are parsed with automatic type conversion")
+    print("  Booleans: true/false, Numbers: auto-detected, Strings: as-is")
     print("\n💡 Note:")
     print("  Robot connects automatically at startup")
     print("  Robot disconnects automatically at exit")
     print("="*60)
-
-
-def parse_command(line: str) -> tuple:
-    """
-    Parse user command line.
-    
-    Args:
-        line: Command line string
-        
-    Returns:
-        Tuple of (command, args)
-    """
-    parts = line.strip().split()
-    if not parts:
-        return None, []
-    
-    command = parts[0].lower()
-    args = parts[1:]
-    return command, args
 
 
 def main():
@@ -803,10 +905,29 @@ def main():
         print("❌ Failed to connect. Exiting.")
         return
     
-    print("\nType 'looptest' to run the loop test")
-    print("Type 'help' for available commands")
+    print("\nType function names with parameters:")
+    print("  goto target_id=LM2")
+    print("  looptest")
+    print("  goto_charge")
+    print("\nType 'help' for available commands")
     print("Type 'exit' or 'quit' to exit")
     print("-"*60)
+    
+    # Available functions mapping
+    functions = {
+        'status': status,
+        'looptest': looptest,
+        'goto': goto,
+        'goto_charge': goto_charge,
+        'goto_start': goto_start,
+        'arm_dock2rack': arm_dock2rack,
+        'arm_rack2side': arm_rack2side,
+        'arm_side2rack': arm_side2rack,
+        'arm_rack2dock': arm_rack2dock,
+        'courier_dock2rack': courier_dock2rack,
+        'courier_rack2dock': courier_rack2dock,
+        'task_status': task_status,
+    }
     
     try:
         while True:
@@ -820,58 +941,35 @@ def main():
             if not line:
                 continue
             
-            # Parse command
-            command, args = parse_command(line)
+            # Parse command using the same parser as controllers
+            func_name, params = parse_command_line(line)
             
-            if command is None:
+            if func_name is None:
                 continue
             
-            # Handle commands
+            # Handle special commands
             try:
-                if command in ['exit', 'quit', 'q']:
+                if func_name in ['exit', 'quit', 'q']:
                     print("\n👋 Exiting...")
                     break
                 
-                elif command == 'help':
+                elif func_name == 'help':
                     print_help()
                 
-                elif command == 'status':
-                    status()
-                
-                elif command == 'looptest':
-                    looptest()
-                
-                elif command == 'goto_charge':
-                    goto_charge()
-                
-                elif command == 'goto':
-                    if len(args) < 1:
-                        print("❌ Usage: goto <target_id>")
-                        print("   Example: goto LM2")
-                    else:
-                        target_id = args[0]
-                        goto(target_id)
-                
-                elif command == 'arm_dock2rack':
-                    arm_dock2rack()
-                
-                elif command == 'arm_rack2side':
-                    arm_rack2side()
-                
-                elif command == 'arm_side2rack':
-                    arm_side2rack()
-                
-                elif command == 'arm_rack2dock':
-                    arm_rack2dock()
-                
-                elif command == 'courier_dock2rack':
-                    courier_dock2rack()
-                
-                elif command == 'courier_rack2dock':
-                    courier_rack2dock()
+                # Call the function with parameters
+                elif func_name in functions:
+                    func = functions[func_name]
+                    try:
+                        result = func(**params)
+                        # If result is a dict (for non-blocking functions), show task_id
+                        if isinstance(result, dict) and 'task_id' in result:
+                            print(f"📋 Task ID: {result.get('task_id', 'N/A')}")
+                    except TypeError as e:
+                        print(f"❌ Invalid parameters for {func_name}: {e}")
+                        print(f"   Try: {func_name} with key=value parameters")
                 
                 else:
-                    print(f"❌ Unknown command: {command}")
+                    print(f"❌ Unknown command: {func_name}")
                     print("   Type 'help' for available commands")
             
             except ValueError as e:
