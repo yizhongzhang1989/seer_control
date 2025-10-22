@@ -358,6 +358,74 @@ def get_push_data():
         }), 500
 
 
+@app.route('/api/emergency_stop', methods=['POST'])
+def emergency_stop():
+    """Trigger emergency stop."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    try:
+        # Call softemc with status=True to trigger emergency stop via other controller
+        result = ctrl.robot.other.softemc(status=True)
+        
+        if result and result.get('ret_code') == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Emergency stop activated'
+            })
+        else:
+            error_msg = result.get('err_msg', 'Unknown error') if result else 'No response'
+            return jsonify({
+                'success': False,
+                'message': f'Emergency stop failed: {error_msg}'
+            }), 500
+    except Exception as e:
+        logger.error(f"Error triggering emergency stop: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/emergency_recover', methods=['POST'])
+def emergency_recover():
+    """Recover from emergency stop."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    try:
+        # Call softemc with status=False to recover from emergency stop via other controller
+        result = ctrl.robot.other.softemc(status=False)
+        
+        if result and result.get('ret_code') == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Successfully recovered from emergency stop'
+            })
+        else:
+            error_msg = result.get('err_msg', 'Unknown error') if result else 'No response'
+            return jsonify({
+                'success': False,
+                'message': f'Recovery failed: {error_msg}'
+            }), 500
+    except Exception as e:
+        logger.error(f"Error recovering from emergency stop: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
 # ============================================================================
 # Application Entry Point
 # ============================================================================

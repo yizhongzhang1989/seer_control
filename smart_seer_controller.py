@@ -70,7 +70,7 @@ class SmartSeerController:
         self._push_data_lock = threading.Lock()
         
         # Internal state
-        self._robot: Optional[SeerController] = None
+        self.robot: Optional[SeerController] = None
         self._is_connected = False
         self._task_id_counter = 0
         self.last_navigation_time: Optional[float] = None  # Timestamp of last navigation call (time.time())
