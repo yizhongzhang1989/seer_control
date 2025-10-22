@@ -13,6 +13,7 @@ Date: October 22, 2025
 from seer_control import SeerController
 from typing import Optional, Dict, Any, List
 import time
+import threading
 from datetime import datetime
 
 
@@ -44,14 +45,33 @@ class SmartSeerController:
                 print(status)
     """
     
-    def __init__(self, robot_ip: str):
+    def __init__(
+        self, 
+        robot_ip: str,
+    ):
         """
         Initialize the Smart SEER Controller.
         
         Args:
             robot_ip: IP address of the SEER robot (e.g., "192.168.1.123")
         """
+        # Connection settings
         self.robot_ip = robot_ip
+        
+        # Push configuration
+        self.push_interval = 1000  # milliseconds, 0 to disable
+        self.push_fields = [
+            "x", "y", "angle", "current_station",
+            "vx", "vy", "w",
+            "battery_level", "charging",
+            "emergency", "fatals", "errors", "warnings", "notices",
+            "create_on", "confidence",
+            "task_status", "task_type"
+        ]
+        self._push_data: Dict[str, Any] = {}
+        self._push_data_lock = threading.Lock()
+        
+        # Internal state
         self._robot: Optional[SeerController] = None
         self._is_connected = False
         self._task_id_counter = 0
@@ -60,8 +80,8 @@ class SmartSeerController:
         """
         Connect to the SEER robot.
         
-        Establishes connections to all essential robot services including
-        status, task, and control interfaces.
+        Establishes connections to all robot services including status, task,
+        control interfaces, and push controller (if push_interval > 0).
         
         Args:
             verbose: If True, prints connection status messages (default: True)
@@ -70,7 +90,7 @@ class SmartSeerController:
             True if connected successfully to at least one service, False otherwise
             
         Examples:
-            controller = SmartSeerController()
+            controller = SmartSeerController("192.168.1.123")
             if controller.connect():
                 print("Connected!")
             
@@ -82,7 +102,7 @@ class SmartSeerController:
         
         try:
             self.robot = SeerController(self.robot_ip)
-            connections = self.robot.connect_essential()
+            connections = self.robot.connect_all()
             
             if verbose:
                 print("\n📊 Connection Status:")
@@ -95,6 +115,34 @@ class SmartSeerController:
             self.is_connected = any(connections.values())
             
             if self.is_connected:
+                # Enable push controller if push_interval > 0
+                if self.push_interval > 0 and connections.get('push', False):
+                    if verbose:
+                        print(f"\n⚡ Configuring push controller (interval: {self.push_interval}ms)...")
+                    
+                    result = self.robot.push.configure_push(
+                        interval=self.push_interval,
+                        included_fields=self.push_fields
+                    )
+                    
+                    if result and result.get('ret_code') == 0:
+                        if verbose:
+                            print("   ✅ Push configured successfully")
+                        
+                        # Start listening with callback
+                        if verbose:
+                            print("   🎧 Starting push listener...")
+                        
+                        if self.robot.push.start_listening(callback=self._push_data_callback):
+                            if verbose:
+                                print("   ✅ Push listener started")
+                        else:
+                            if verbose:
+                                print("   ⚠️  Failed to start push listener")
+                    else:
+                        if verbose:
+                            print("   ⚠️  Push configuration failed")
+                
                 if verbose:
                     print("\n✅ Connected successfully!")
                 return True
@@ -138,6 +186,10 @@ class SmartSeerController:
             if verbose:
                 print("\n🔌 Disconnecting from robot...")
             
+            # Stop push listener if running
+            if hasattr(self.robot, 'push') and self.robot.push.listening:
+                self.robot.push.stop_listening()
+            
             self.robot.disconnect_all()
             self.robot = None
             self.is_connected = False
@@ -151,6 +203,19 @@ class SmartSeerController:
                 print(f"❌ Disconnection error: {e}")
             return False
     
+    def _push_data_callback(self, data: Dict[str, Any]) -> None:
+        """
+        Callback function for push data (thread-safe).
+        
+        This is called by the push controller in a background thread.
+        Updates the internal push data storage in a thread-safe manner.
+        
+        Args:
+            data: Push data dictionary received from robot
+        """
+        with self._push_data_lock:
+            self._push_data = data.copy()
+        
     def status(self, detailed: bool = False) -> Dict[str, Any]:
         """
         Query current robot status.
@@ -333,6 +398,116 @@ class SmartSeerController:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         return f"{timestamp}_{self._task_id_counter}"
     
+    def get_push_data(self) -> Dict[str, Any]:
+        """
+        Get the latest push data (thread-safe).
+        
+        Returns a copy of the most recent push data received from the robot.
+        This method is thread-safe and can be called from any thread.
+        
+        Returns:
+            Dictionary containing the latest push data, or empty dict if no data received yet
+            
+        Examples:
+            # Get latest push data
+            data = controller.get_push_data()
+            print(f"Position: ({data.get('x')}, {data.get('y')})")
+            print(f"Battery: {data.get('battery_level')}%")
+        """
+        with self._push_data_lock:
+            return self._push_data.copy()
+    
+    def print_push_data(self) -> bool:
+        """
+        Print the current push data in a formatted way.
+        
+        Displays the latest push data received from the robot in a nicely
+        formatted console output. This is useful for debugging and monitoring.
+        
+        Returns:
+            True if push data was printed, False if no data available yet
+            
+        Examples:
+            controller.print_push_data()
+        """
+        data = self.get_push_data()
+        
+        if not data:
+            print("⚠️  No push data received yet")
+            return False
+        
+        print("\n" + "="*60)
+        print("📡 Push Data")
+        print("="*60)
+        
+        # Position data
+        if any(k in data for k in ['x', 'y', 'angle', 'current_station']):
+            print("\n📍 Position:")
+            if 'x' in data:
+                print(f"  X: {data['x']:.3f} m")
+            if 'y' in data:
+                print(f"  Y: {data['y']:.3f} m")
+            if 'angle' in data:
+                print(f"  Angle: {data['angle']:.3f} rad")
+            if 'current_station' in data:
+                print(f"  Station: {data['current_station']}")
+            if 'confidence' in data:
+                print(f"  Confidence: {data['confidence']:.2f}")
+        
+        # Velocity data
+        if any(k in data for k in ['vx', 'vy', 'w']):
+            print("\n🏃 Velocity:")
+            if 'vx' in data:
+                print(f"  Vx: {data['vx']:.3f} m/s")
+            if 'vy' in data:
+                print(f"  Vy: {data['vy']:.3f} m/s")
+            if 'w' in data:
+                print(f"  W: {data['w']:.3f} rad/s")
+        
+        # Battery data
+        if any(k in data for k in ['battery_level', 'charging']):
+            print("\n🔋 Battery:")
+            if 'battery_level' in data:
+                print(f"  Level: {data['battery_level']}%")
+            if 'charging' in data:
+                print(f"  Charging: {'Yes' if data['charging'] else 'No'}")
+        
+        # Status indicators
+        if any(k in data for k in ['emergency', 'fatals', 'errors', 'warnings', 'notices']):
+            print("\n⚠️  Status:")
+            if 'emergency' in data:
+                status_text = "EMERGENCY" if data['emergency'] else "Normal"
+                icon = "🚨" if data['emergency'] else "✅"
+                print(f"  {icon} Emergency: {status_text}")
+            if 'fatals' in data:
+                print(f"  Fatals: {data['fatals']}")
+            if 'errors' in data:
+                print(f"  Errors: {data['errors']}")
+            if 'warnings' in data:
+                print(f"  Warnings: {data['warnings']}")
+            if 'notices' in data:
+                print(f"  Notices: {data['notices']}")
+        
+        # Task data
+        if any(k in data for k in ['task_status', 'task_type']):
+            print("\n📊 Task:")
+            if 'task_status' in data:
+                status_map = {
+                    0: "NONE", 1: "WAITING", 2: "RUNNING", 3: "SUSPENDED",
+                    4: "COMPLETED", 5: "FAILED", 6: "CANCELED"
+                }
+                status_text = status_map.get(data['task_status'], "UNKNOWN")
+                print(f"  Status: {status_text} ({data['task_status']})")
+            if 'task_type' in data:
+                print(f"  Type: {data['task_type']}")
+        
+        # Timestamp
+        if 'create_on' in data:
+            print(f"\n🕐 Timestamp: {data['create_on']}")
+        
+        print("="*60)
+        return True
+
     # ========================================================================
     # General Navigation Methods
     # ========================================================================

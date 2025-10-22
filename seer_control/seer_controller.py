@@ -120,7 +120,7 @@ class SeerController:
         self._connections['control'] = self.control.connect(timeout)
         self._connections['config'] = self.config.connect(timeout)
         self._connections['other'] = self.other.connect(timeout)
-        # Note: Push controller connects separately when needed
+        self._connections['push'] = self.push.connect(timeout)
         
         return self._connections.copy()
     
