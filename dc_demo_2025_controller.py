@@ -225,6 +225,114 @@ class DCDemo2025Controller(SmartSeerController):
                     "task_id": None,
                 }
             ],
+            "arm_dock2side": [
+                {
+                    "source_id": "LM9",
+                    "id": "AP8",
+                    "task_id": None,
+                    "recognize": True,
+                    "operation": "JackLoad"
+                },
+                {
+                    "source_id": "AP8",
+                    "id": "LM9",
+                    "task_id": None,
+                },
+                {
+                    "source_id": "LM9",
+                    "id": "LM5",
+                    "task_id": None,
+                    "spin": True,
+                },
+                {
+                    "source_id": "LM5",
+                    "id": "LM12",
+                    "task_id": None,
+                    "spin": True,
+                },
+                {
+                    "source_id": "LM12",
+                    "id": "AP11",
+                    "task_id": None,
+                    "operation": "JackUnload"
+                },
+                {
+                    "source_id": "AP11",
+                    "id": "LM13",
+                    "task_id": None,
+                },
+                {
+                    "source_id": "LM13",
+                    "id": "LM2",
+                    "task_id": None,
+                },                
+            ],
+            "arm_side2dock": [
+                {
+                    "source_id": "LM2",
+                    "id": "LM13",
+                    "task_id": None,
+                },
+                {
+                    "source_id": "LM13",
+                    "id": "AP11",
+                    "task_id": None,
+                    "recognize": True,
+                },
+                {
+                    "source_id": "SELF_POSITION",
+                    "id": "SELF_POSITION",
+                    "task_id": None,
+                    "move_angle": 1.5707963,
+                    "skill_name": "GoByOdometer",
+                    "speed_w": 0.5,
+                    "loc_mode": 1,
+                    "operation": "JackLoad",
+                },
+                {
+                    "source_id": "SELF_POSITION",
+                    "id": "SELF_POSITION",
+                    "task_id": None,
+                    "operation": "JackLoad",
+                },
+                {
+                    "source_id": "AP11",
+                    "id": "LM12",
+                    "task_id": None,
+                },
+                {
+                    "source_id": "SELF_POSITION",
+                    "id": "SELF_POSITION",
+                    "task_id": None,
+                    "move_angle": 1.5707963,
+                    "skill_name": "GoByOdometer",
+                    "speed_w": 0.5,
+                    "loc_mode": 1,
+                },
+                {
+                    "source_id": "LM12",
+                    "id": "LM5",
+                    "task_id": None,
+                    "spin": True,
+                },
+                {
+                    "source_id": "LM5",
+                    "id": "LM9",
+                    "task_id": None,
+                    "spin": True,
+                },
+                {
+                    "source_id": "LM9",
+                    "id": "AP8",
+                    "task_id": None,
+                    "operation": "JackUnload"
+                },
+                {           
+                    "source_id": "AP8",
+                    "id": "LM9",
+                    "task_id": None,
+                }                
+            ],
             "courier_dock2rack": [
                 {
                     "source_id": "LM4",
