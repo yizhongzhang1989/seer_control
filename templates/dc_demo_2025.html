@@ -461,9 +461,6 @@
         let connected = false;
         let pushDataInterval = null;
 
-        // Initialize - check status on page load
-        checkStatus();
-
         // Update UI based on connection status
         function updateConnectionUI(isConnected) {
             connected = isConnected;
@@ -949,10 +946,31 @@
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
+        // Check robot connection status
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data.connected) {
+                    log('Robot already connected', 'success');
+                    updateConnectionUI(true);
+                    loadTrajectories();
+                    startPushDataPolling();
+                } else {
+                    log('Robot not connected', 'info');
+                    updateConnectionUI(false);
+                }
+            } catch (error) {
+                log('Error checking connection status: ' + error.message, 'error');
+                updateConnectionUI(false);
+            }
+        }
+
         // Initialize on load
         window.onload = () => {
             log('Web interface loaded', 'info');
-            updateConnectionUI(false);
+            checkStatus();
         };
     </script>
 </body>
