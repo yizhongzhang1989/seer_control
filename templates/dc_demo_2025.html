@@ -508,6 +508,9 @@
 
         // Connect to robot
         async function connectRobot() {
+            // Log connection attempt
+            log('Connecting to robot...', 'info');
+            
             try {
                 const response = await fetch('/api/connect', { method: 'POST' });
                 const data = await response.json();
@@ -869,19 +872,44 @@
             }
         }
 
+        // Handle automatic disconnection detection
+        function handleDisconnection() {
+            if (!connected) return; // Already disconnected
+            
+            console.log('Connection lost - updating UI');
+            showAlert('Connection lost to robot', 'error');
+            log('Connection lost to robot', 'error');
+            updateConnectionUI(false);
+            stopPushDataPolling();
+        }
+
         // Poll push data from robot
         async function pollPushData() {
             if (!connected) return;
             
             try {
                 const response = await fetch('/api/push_data');
+                
+                // Check if response indicates connection lost
+                if (!response.ok) {
+                    console.log('Push data request failed:', response.status);
+                    // Connection lost - disconnect
+                    handleDisconnection();
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 if (data.success && data.data) {
                     updateRobotStatus(data.data);
+                } else if (!data.success) {
+                    // Server reported failure
+                    console.log('Push data failed:', data.message);
+                    handleDisconnection();
                 }
             } catch (error) {
-                // Silent fail - don't spam log
+                console.error('Error polling push data:', error);
+                handleDisconnection();
             }
         }
 

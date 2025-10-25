@@ -46,18 +46,24 @@ def initialize_controller():
     global controller
     
     with controller_lock:
+        # Create new controller if none exists
         if controller is None:
             logger.info(f"Initializing controller for robot at {ROBOT_IP}")
             controller = DCDemo2025Controller(ROBOT_IP)
-            
-            if controller.connect(verbose=False):
+        
+        # Always try to connect (handles reconnection after disconnection)
+        if not controller.is_connected:
+            logger.info(f"Connecting to robot at {ROBOT_IP}")
+            if controller.connect(verbose=False, timeout=5.0):
                 logger.info("Controller connected successfully")
                 return True
             else:
                 logger.error("Failed to connect to robot")
                 controller = None
                 return False
-        return True
+        else:
+            logger.info("Controller already connected")
+            return True
 
 
 def get_controller() -> Optional[DCDemo2025Controller]:
@@ -78,7 +84,7 @@ def index():
 
 @app.route('/api/status')
 def get_status():
-    """Get robot connection status."""
+    """Get robot connection status with health check."""
     ctrl = get_controller()
     
     if ctrl is None:
@@ -87,8 +93,11 @@ def get_status():
             'robot_ip': ROBOT_IP
         })
     
+    # Perform connection health check
+    is_healthy = ctrl.check_connection_health()
+    
     return jsonify({
-        'connected': ctrl.is_connected,
+        'connected': is_healthy,
         'robot_ip': ROBOT_IP
     })
 
@@ -334,13 +343,20 @@ def get_idle_time():
 
 @app.route('/api/push_data')
 def get_push_data():
-    """Get latest push data from robot."""
+    """Get latest push data from robot with connection health check."""
     ctrl = get_controller()
     
-    if ctrl is None or not ctrl.is_connected:
+    if ctrl is None:
         return jsonify({
             'success': False,
             'message': 'Robot not connected'
+        }), 400
+    
+    # Check connection health
+    if not ctrl.check_connection_health():
+        return jsonify({
+            'success': False,
+            'message': 'Connection lost'
         }), 400
     
     try:

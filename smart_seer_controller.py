@@ -69,14 +69,29 @@ class SmartSeerController:
         ]
         self._push_data: Dict[str, Any] = {}
         self._push_data_lock = threading.Lock()
+        self._last_push_time: Optional[float] = None  # Timestamp of last push data received
         
         # Internal state
         self.robot: Optional[SeerController] = None
-        self._is_connected = False
+        self.is_connected = False
         self._task_id_counter = 0
         self.last_navigation_time: Optional[float] = None  # Timestamp of last navigation call (time.time())
     
-    def connect(self, verbose: bool = True) -> bool:
+    @property
+    def _push_timeout(self) -> float:
+        """
+        Calculate push timeout dynamically based on push interval.
+        
+        Timeout is push_interval (in seconds) + 5 seconds buffer.
+        This ensures we allow enough time for push data to arrive
+        even if there are network delays.
+        
+        Returns:
+            Timeout in seconds
+        """
+        return (self.push_interval / 1000.0) + 5.0
+    
+    def connect(self, verbose: bool = True, timeout: float = 5.0) -> bool:
         """
         Connect to the SEER robot.
         
@@ -85,6 +100,7 @@ class SmartSeerController:
         
         Args:
             verbose: If True, prints connection status messages (default: True)
+            timeout: Connection timeout in seconds (default: 5.0)
             
         Returns:
             True if connected successfully to at least one service, False otherwise
@@ -94,16 +110,57 @@ class SmartSeerController:
             if controller.connect():
                 print("Connected!")
             
-            # Silent connection
-            controller.connect(verbose=False)
+            # Silent connection with custom timeout
+            controller.connect(verbose=False, timeout=10.0)
         """
         if verbose:
             print(f"\n🔌 Connecting to robot at {self.robot_ip}...")
         
+        # Use a threading approach to implement timeout
+        connection_result = {'success': False, 'connections': None, 'error': None}
+        
+        def _do_connect():
+            try:
+                self.robot = SeerController(self.robot_ip)
+                connections = self.robot.connect_all()
+                connection_result['success'] = True
+                connection_result['connections'] = connections
+            except Exception as e:
+                connection_result['error'] = e
+        
+        # Start connection in a separate thread
+        connect_thread = threading.Thread(target=_do_connect, daemon=True)
+        connect_thread.start()
+        connect_thread.join(timeout=timeout)
+        
+        # Check if connection completed within timeout
+        if connect_thread.is_alive():
+            # Connection timed out
+            if verbose:
+                print(f"\n❌ Connection timeout after {timeout} seconds")
+            self.robot = None
+            self.is_connected = False
+            return False
+        
+        # Check if connection had an error
+        if connection_result['error']:
+            if verbose:
+                print(f"\n❌ Connection error: {connection_result['error']}")
+            self.robot = None
+            self.is_connected = False
+            return False
+        
+        # Check if connection succeeded
+        if not connection_result['success']:
+            if verbose:
+                print("\n❌ Connection failed")
+            self.robot = None
+            self.is_connected = False
+            return False
+        
+        connections = connection_result['connections']
+        
         try:
-            self.robot = SeerController(self.robot_ip)
-            connections = self.robot.connect_all()
-            
             if verbose:
                 print("\n📊 Connection Status:")
                 for service, connected in connections.items():
@@ -203,18 +260,117 @@ class SmartSeerController:
                 print(f"❌ Disconnection error: {e}")
             return False
     
+    def _cleanup_robot(self) -> None:
+        """
+        Internal method to clean up robot object when connection is lost.
+        
+        This ensures that the robot object is properly disposed of so that
+        reconnection attempts will create a fresh connection.
+        """
+        try:
+            if self.robot:
+                # Try to stop push listener if it's running
+                if hasattr(self.robot, 'push') and hasattr(self.robot.push, 'stop_listening'):
+                    try:
+                        self.robot.push.stop_listening()
+                    except Exception:
+                        pass  # Ignore errors during cleanup
+                
+                # Try to disconnect all services
+                try:
+                    self.robot.disconnect_all()
+                except Exception:
+                    pass  # Ignore errors during cleanup
+                
+                self.robot = None
+                self._last_push_time = None  # Reset push timestamp
+        except Exception:
+            pass  # Ignore any cleanup errors
+    
+    def check_connection_health(self, verbose: bool = False) -> bool:
+        """
+        Check if the connection is still healthy based on push data.
+        
+        This method verifies the connection by checking:
+        1. If we're marked as connected
+        2. If push controller is still connected
+        3. If we've received push data recently (within timeout threshold)
+        
+        If push data hasn't been received within the timeout period,
+        the connection is considered lost and the status is updated.
+        
+        Note: If no push data has been received yet (_last_push_time is None),
+        the connection is still considered healthy as we may have just connected.
+        
+        Args:
+            verbose: If True, prints debug information about connection health checks
+        
+        Returns:
+            True if connection is healthy, False if connection is lost
+            
+        Examples:
+            if not controller.check_connection_health():
+                print("Connection lost!")
+                controller.disconnect()
+        """
+        # Not connected at all
+        if not self.is_connected or self.robot is None:
+            if verbose:
+                print(f"Health check: Not connected (is_connected={self.is_connected}, robot={self.robot is not None})")
+            return False
+        
+        # Check if push controller detected disconnection
+        if hasattr(self.robot, 'push'):
+            push_connected = self.robot.push.connected
+            if verbose:
+                print(f"Health check: Push controller connected={push_connected}")
+            if not push_connected:
+                self.is_connected = False
+                if verbose:
+                    print("Health check: FAILED - Push controller disconnected")
+                # Clean up robot object to allow reconnection
+                self._cleanup_robot()
+                return False
+        
+        # Check if push data is stale (only if we have received push data before)
+        # If _last_push_time is None, we haven't received data yet, which is OK for a new connection
+        if self.push_interval > 0 and self._last_push_time is not None:
+            time_since_last_push = time.time() - self._last_push_time
+            if verbose:
+                print(f"Health check: Time since last push={time_since_last_push:.2f}s, timeout={self._push_timeout:.2f}s")
+            if time_since_last_push > self._push_timeout:
+                # No push data received for too long - connection likely lost
+                self.is_connected = False
+                if verbose:
+                    print(f"Health check: FAILED - Push data stale ({time_since_last_push:.2f}s > {self._push_timeout:.2f}s)")
+                # Clean up robot object to allow reconnection
+                self._cleanup_robot()
+                return False
+        elif verbose:
+            print(f"Health check: Last push time={self._last_push_time} (None = no data yet)")
+        
+        if verbose:
+            print("Health check: PASSED")
+        return True
+    
     def _push_data_callback(self, data: Dict[str, Any]) -> None:
         """
         Callback function for push data (thread-safe).
         
         This is called by the push controller in a background thread.
         Updates the internal push data storage in a thread-safe manner.
+        Also updates the timestamp for connection health monitoring.
         
         Args:
             data: Push data dictionary received from robot
         """
         with self._push_data_lock:
             self._push_data = data.copy()
+            self._last_push_time = time.time()
+            
+            # Check if push controller detected disconnection
+            if self.robot and self.robot.push and not self.robot.push.connected:
+                self.is_connected = False
     
     def __enter__(self):
         """Context manager entry - connects to robot."""
