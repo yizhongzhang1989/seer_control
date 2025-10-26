@@ -1149,6 +1149,7 @@
                     log('Robot already connected', 'success');
                     updateConnectionUI(true);
                     loadTrajectories();
+                    loadAutoChargeConfig();
                     startPushDataPolling();
                 } else {
                     log('Robot not connected', 'info');
