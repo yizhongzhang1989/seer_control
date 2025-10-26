@@ -399,6 +399,23 @@ class DCDemo2025Controller(SmartSeerController):
                     "id": "LM4",
                     "task_id": None,
                 }
+            ],
+            "courier_rack2pre": [
+                {
+                    "source_id": "AP7",
+                    "id": "LM14",
+                    "task_id": None,
+                }
+            ],
+            "courier_pre2rack": [
+                {
+                    "source_id": "LM14",
+                    "id": "AP7",
+                    "task_id": None,
+                    "recognize": True,
+                },
+
+              
             ]
         }
     
