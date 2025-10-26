@@ -449,6 +449,7 @@ class SmartSeerController:
                 
                 # Skip warnings and charging if robot is already charging
                 if is_charging:
+                    print(f"   🔌 Robot is currently charging, current battery level: {battery_level:.1f}%")
                     continue
                 
                 # Play warning audio every iteration if battery is below warning threshold
