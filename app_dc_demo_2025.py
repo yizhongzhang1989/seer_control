@@ -590,6 +590,140 @@ def cancel_task():
         }), 500
 
 
+@app.route('/api/auto_charge_config', methods=['GET', 'POST'])
+def auto_charge_config():
+    """Get or update auto-charge configuration."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    if request.method == 'GET':
+        # Return current configuration
+        return jsonify({
+            'success': True,
+            'config': {
+                'enable_auto_charge': ctrl.enable_auto_charge,
+                'pre_charge_point': ctrl.pre_charge_point,
+                'charge_point': ctrl.charge_point,
+                'warning_battery_percentage': ctrl.warning_battery_percentage,
+                'charge_battery_percentage': ctrl.charge_battery_percentage
+            }
+        })
+    
+    elif request.method == 'POST':
+        # Update configuration
+        try:
+            data = request.json
+            
+            # Update controller settings
+            if 'enable_auto_charge' in data:
+                ctrl.enable_auto_charge = data['enable_auto_charge']
+            
+            if 'pre_charge_point' in data:
+                ctrl.pre_charge_point = data['pre_charge_point']
+            
+            if 'charge_point' in data:
+                ctrl.charge_point = data['charge_point']
+            
+            if 'warning_battery_percentage' in data:
+                ctrl.warning_battery_percentage = data['warning_battery_percentage']
+            
+            if 'charge_battery_percentage' in data:
+                ctrl.charge_battery_percentage = data['charge_battery_percentage']
+            
+            # Start or stop battery monitor thread based on enable_auto_charge
+            if ctrl.enable_auto_charge:
+                ctrl._start_battery_monitor(verbose=True)
+            else:
+                ctrl._stop_battery_monitor(verbose=True)
+            
+            logger.info(f"Auto-charge config updated: enable={ctrl.enable_auto_charge}, "
+                       f"pre_charge={ctrl.pre_charge_point}, charge={ctrl.charge_point}, "
+                       f"warning={ctrl.warning_battery_percentage}%, "
+                       f"charge_at={ctrl.charge_battery_percentage}%")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Auto-charge configuration updated successfully'
+            })
+        except Exception as e:
+            logger.error(f"Error updating auto-charge config: {e}")
+            return jsonify({
+                'success': False,
+                'message': str(e)
+            }), 500
+
+
+@app.route('/api/occupy', methods=['POST'])
+def occupy_robot():
+    """Occupy (lock) the robot."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    try:
+        result = ctrl.robot.config.lock(nick_name="dc25_web")
+        
+        if result and result.get('ret_code') == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Robot occupied successfully'
+            })
+        else:
+            error_msg = result.get('err_msg', 'Unknown error') if result else 'No response'
+            return jsonify({
+                'success': False,
+                'message': f'Failed to occupy robot: {error_msg}'
+            }), 500
+    except Exception as e:
+        logger.error(f"Error occupying robot: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/release', methods=['POST'])
+def release_robot():
+    """Release (unlock) the robot."""
+    ctrl = get_controller()
+    
+    if ctrl is None or not ctrl.is_connected:
+        return jsonify({
+            'success': False,
+            'message': 'Robot not connected'
+        }), 400
+    
+    try:
+        result = ctrl.robot.config.unlock()
+        
+        if result and result.get('ret_code') == 0:
+            return jsonify({
+                'success': True,
+                'message': 'Robot released successfully'
+            })
+        else:
+            error_msg = result.get('err_msg', 'Unknown error') if result else 'No response'
+            return jsonify({
+                'success': False,
+                'message': f'Failed to release robot: {error_msg}'
+            }), 500
+    except Exception as e:
+        logger.error(f"Error releasing robot: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+
 # ============================================================================
 # Application Entry Point
 # ============================================================================

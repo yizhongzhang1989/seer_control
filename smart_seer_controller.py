@@ -60,8 +60,8 @@ class SmartSeerController:
         self.enable_auto_charge = True
         self.charge_point = 'CP0'
         self.pre_charge_point = 'LM2'
-        self.warning_battery_percentage = 10.0
-        self.charge_battery_percentage = 98.0
+        self.warning_battery_percentage = 20.0
+        self.charge_battery_percentage = 15.0
         self._battery_monitor_thread: Optional[threading.Thread] = None
         self._battery_monitor_stop_event = threading.Event()
         
@@ -432,7 +432,7 @@ class SmartSeerController:
         - Plays warning audio if battery < warning_battery_percentage and not charging
         - Triggers auto-charge if battery < charge_battery_percentage and not charging
         """
-        while not self._battery_monitor_stop_event.wait(10):  # Check every 60 seconds
+        while not self._battery_monitor_stop_event.wait(60):  # Check every 60 seconds
             try:
                 if not self.is_connected or self.robot is None:
                     continue

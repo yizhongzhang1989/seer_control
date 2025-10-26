@@ -394,16 +394,24 @@
             <!-- Manual Navigation -->
             <div class="card">
                 <h2>🎯 Manual Navigation</h2>
-                <div class="input-group">
-                    <label for="targetInput">Target ID:</label>
-                    <input type="text" id="targetInput" placeholder="e.g., LM2, AP8, CP0" />
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <label for="targetInput" style="margin: 0; white-space: nowrap; font-size: 14px;">Target ID:</label>
+                    <input type="text" id="targetInput" placeholder="e.g., LM2, AP8, CP0" style="flex: 1; padding: 8px;" />
+                    <button class="btn btn-success" onclick="gotoTarget()" id="gotoBtn" disabled style="white-space: nowrap;">
+                        ➡️ Go to Target
+                    </button>
                 </div>
-                <button class="btn btn-success" onclick="gotoTarget()" id="gotoBtn" disabled>
-                    ➡️ Go to Target
-                </button>
-                <button class="btn btn-warning" onclick="gotoCharge()" id="gotoChargeBtn" disabled>
-                    🔋 Go to Charge
-                </button>
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <button class="btn btn-warning" onclick="gotoCharge()" id="gotoChargeBtn" disabled style="flex: 1;">
+                        🔋 Go to Charge
+                    </button>
+                    <button class="btn btn-primary" onclick="occupyRobot()" id="occupyBtn" disabled style="flex: 1;">
+                        🔒 Occupy
+                    </button>
+                    <button class="btn btn-secondary" onclick="releaseRobot()" id="releaseBtn" disabled style="flex: 1;">
+                        🔓 Release
+                    </button>
+                </div>
                 <div style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 15px;">
                     <h3 style="font-size: 16px; margin-bottom: 10px;">Task Controls</h3>
                     <button class="btn btn-info" onclick="pauseTask()" id="pauseBtn" disabled>
@@ -414,6 +422,34 @@
                     </button>
                     <button class="btn btn-danger" onclick="cancelTask()" id="cancelBtn" disabled>
                         ❌ Cancel
+                    </button>
+                </div>
+                <div style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 15px;">
+                    <h3 style="font-size: 16px; margin-bottom: 10px;">🔋 Auto-Charge Configuration</h3>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" id="enableAutoCharge" style="width: auto; margin-right: 8px;">
+                            <span>Enable Auto-Charge</span>
+                        </label>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <label style="width: 180px; margin: 0; font-size: 14px;">Pre-Charge Point:</label>
+                        <input type="text" id="preChargePoint" placeholder="e.g., LM2" value="LM2" style="flex: 1; padding: 6px;">
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <label style="width: 180px; margin: 0; font-size: 14px;">Charge Point:</label>
+                        <input type="text" id="chargePoint" placeholder="e.g., CP0" value="CP0" style="flex: 1; padding: 6px;">
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <label style="width: 180px; margin: 0; font-size: 14px;">Warning Battery %:</label>
+                        <input type="number" id="warningBatteryPercentage" placeholder="30" value="30" min="0" max="100" step="1" style="flex: 1; padding: 6px;">
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                        <label style="width: 180px; margin: 0; font-size: 14px;">Charge Battery %:</label>
+                        <input type="number" id="chargeBatteryPercentage" placeholder="20" value="20" min="0" max="100" step="1" style="flex: 1; padding: 6px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="saveAutoChargeConfig()" style="width: 100%;">
+                        💾 Save Configuration
                     </button>
                 </div>
             </div>
@@ -471,6 +507,8 @@
             const trajectoryBtns = document.querySelectorAll('.trajectory-btn');
             const gotoBtn = document.getElementById('gotoBtn');
             const gotoChargeBtn = document.getElementById('gotoChargeBtn');
+            const occupyBtn = document.getElementById('occupyBtn');
+            const releaseBtn = document.getElementById('releaseBtn');
             const emergencyStopBtn = document.getElementById('emergencyStopBtn');
             const recoverBtn = document.getElementById('recoverBtn');
             const pauseBtn = document.getElementById('pauseBtn');
@@ -485,6 +523,8 @@
                 trajectoryBtns.forEach(btn => btn.disabled = false);
                 gotoBtn.disabled = false;
                 gotoChargeBtn.disabled = false;
+                occupyBtn.disabled = false;
+                releaseBtn.disabled = false;
                 emergencyStopBtn.disabled = false;
                 recoverBtn.disabled = false;
                 pauseBtn.disabled = false;
@@ -498,6 +538,8 @@
                 trajectoryBtns.forEach(btn => btn.disabled = true);
                 gotoBtn.disabled = true;
                 gotoChargeBtn.disabled = true;
+                occupyBtn.disabled = true;
+                releaseBtn.disabled = true;
                 emergencyStopBtn.disabled = true;
                 recoverBtn.disabled = true;
                 pauseBtn.disabled = true;
@@ -520,6 +562,7 @@
                     log(data.message, 'success');
                     updateConnectionUI(true);
                     loadTrajectories();
+                    loadAutoChargeConfig();
                     startPushDataPolling();
                 } else {
                     showAlert(data.message, 'error');
@@ -705,6 +748,52 @@
             }
         }
 
+        // Occupy robot
+        async function occupyRobot() {
+            try {
+                log('🔒 Occupying robot...', 'info');
+                
+                const response = await fetch('/api/occupy', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('🔒 ' + data.message, 'success');
+                    log(data.message, 'success');
+                } else {
+                    showAlert('Failed to occupy robot: ' + data.message, 'error');
+                    log('Failed to occupy robot: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                log('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Release robot
+        async function releaseRobot() {
+            try {
+                log('🔓 Releasing robot...', 'info');
+                
+                const response = await fetch('/api/release', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('🔓 ' + data.message, 'success');
+                    log(data.message, 'success');
+                } else {
+                    showAlert('Failed to release robot: ' + data.message, 'error');
+                    log('Failed to release robot: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                log('Error: ' + error.message, 'error');
+            }
+        }
+
         // Pause task
         async function pauseTask() {
             try {
@@ -771,6 +860,80 @@
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');
                 log('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Save auto-charge configuration
+        async function saveAutoChargeConfig() {
+            try {
+                const enableAutoCharge = document.getElementById('enableAutoCharge').checked;
+                const preChargePoint = document.getElementById('preChargePoint').value.trim();
+                const chargePoint = document.getElementById('chargePoint').value.trim();
+                const warningBatteryPercentage = parseFloat(document.getElementById('warningBatteryPercentage').value);
+                const chargeBatteryPercentage = parseFloat(document.getElementById('chargeBatteryPercentage').value);
+
+                // Validation
+                if (enableAutoCharge && !chargePoint) {
+                    showAlert('Charge Point is required when auto-charge is enabled', 'error');
+                    return;
+                }
+
+                if (isNaN(warningBatteryPercentage) || warningBatteryPercentage < 0 || warningBatteryPercentage > 100) {
+                    showAlert('Warning Battery % must be between 0 and 100', 'error');
+                    return;
+                }
+
+                if (isNaN(chargeBatteryPercentage) || chargeBatteryPercentage < 0 || chargeBatteryPercentage > 100) {
+                    showAlert('Charge Battery % must be between 0 and 100', 'error');
+                    return;
+                }
+
+                log('💾 Saving auto-charge configuration...', 'info');
+
+                const response = await fetch('/api/auto_charge_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        enable_auto_charge: enableAutoCharge,
+                        pre_charge_point: preChargePoint || null,
+                        charge_point: chargePoint,
+                        warning_battery_percentage: warningBatteryPercentage,
+                        charge_battery_percentage: chargeBatteryPercentage
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('✅ ' + data.message, 'success');
+                    log(data.message, 'success');
+                } else {
+                    showAlert('Failed to save configuration: ' + data.message, 'error');
+                    log('Failed to save configuration: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                log('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Load auto-charge configuration
+        async function loadAutoChargeConfig() {
+            try {
+                const response = await fetch('/api/auto_charge_config');
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('enableAutoCharge').checked = data.config.enable_auto_charge;
+                    document.getElementById('preChargePoint').value = data.config.pre_charge_point || '';
+                    document.getElementById('chargePoint').value = data.config.charge_point || '';
+                    document.getElementById('warningBatteryPercentage').value = data.config.warning_battery_percentage;
+                    document.getElementById('chargeBatteryPercentage').value = data.config.charge_battery_percentage;
+                }
+            } catch (error) {
+                console.error('Error loading auto-charge config:', error);
             }
         }
 
