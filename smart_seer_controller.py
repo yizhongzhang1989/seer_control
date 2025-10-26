@@ -56,6 +56,15 @@ class SmartSeerController:
         # Connection settings
         self.robot_ip = robot_ip
         
+        # Auto-charge configuration (configurable member parameters)
+        self.enable_auto_charge = True
+        self.charge_point = 'CP0'
+        self.pre_charge_point = 'LM2'
+        self.warning_battery_percentage = 10.0
+        self.charge_battery_percentage = 98.0
+        self._battery_monitor_thread: Optional[threading.Thread] = None
+        self._battery_monitor_stop_event = threading.Event()
+        
         # Push configuration
         self.push_interval = 1000  # milliseconds, 0 to disable
         self.push_fields = [
@@ -76,6 +85,10 @@ class SmartSeerController:
         self.is_connected = False
         self._task_id_counter = 0
         self.last_navigation_time: Optional[float] = None  # Timestamp of last navigation call (time.time())
+        
+        # Start battery monitoring thread if auto-charge is enabled
+        if self.enable_auto_charge:
+            self._start_battery_monitor(verbose=False)
     
     @property
     def _push_timeout(self) -> float:
@@ -243,6 +256,9 @@ class SmartSeerController:
             if verbose:
                 print("\n🔌 Disconnecting from robot...")
             
+            # Stop battery monitoring thread if running
+            self._stop_battery_monitor(verbose=verbose)
+            
             # Stop push listener if running
             if hasattr(self.robot, 'push') and self.robot.push.listening:
                 self.robot.push.stop_listening()
@@ -371,6 +387,108 @@ class SmartSeerController:
             # Check if push controller detected disconnection
             if self.robot and self.robot.push and not self.robot.push.connected:
                 self.is_connected = False
+    
+    def _start_battery_monitor(self, verbose: bool = True) -> None:
+        """
+        Start the battery monitoring thread for auto-charge functionality.
+        
+        Args:
+            verbose: If True, prints status messages
+        """
+        if self._battery_monitor_thread and self._battery_monitor_thread.is_alive():
+            if verbose:
+                print("   ⚠️  Battery monitor already running")
+            return
+        
+        self._battery_monitor_stop_event.clear()
+        self._battery_monitor_thread = threading.Thread(
+            target=self._battery_monitor_loop,
+            daemon=True,
+            name="BatteryMonitor"
+        )
+        self._battery_monitor_thread.start()
+        
+        if verbose:
+            print("   🔋 Battery monitor started")
+    
+    def _stop_battery_monitor(self, verbose: bool = True) -> None:
+        """
+        Stop the battery monitoring thread.
+        
+        Args:
+            verbose: If True, prints status messages
+        """
+        if self._battery_monitor_thread and self._battery_monitor_thread.is_alive():
+            self._battery_monitor_stop_event.set()
+            self._battery_monitor_thread.join(timeout=2.0)
+            if verbose:
+                print("   🔋 Battery monitor stopped")
+    
+    def _battery_monitor_loop(self) -> None:
+        """
+        Battery monitoring loop that runs in a background thread.
+        
+        Checks battery level every minute and:
+        - Plays warning audio if battery < warning_battery_percentage and not charging
+        - Triggers auto-charge if battery < charge_battery_percentage and not charging
+        """
+        while not self._battery_monitor_stop_event.wait(10):  # Check every 60 seconds
+            try:
+                if not self.is_connected or self.robot is None:
+                    continue
+                
+                # Get current push data
+                push_data = self.get_push_data()
+                if not push_data:
+                    continue
+                
+                battery_level = push_data.get('battery_level', 1.0) * 100  # Convert to percentage
+                is_charging = push_data.get('charging', False)
+                task_status = push_data.get('task_status', 0)  # 0=NONE, 2=RUNNING
+                current_station = push_data.get('current_station', '')
+                
+                # Skip warnings and charging if robot is already charging
+                if is_charging:
+                    continue
+                
+                # Play warning audio every iteration if battery is below warning threshold
+                if battery_level < self.warning_battery_percentage:
+                    self._play_warning_audio()
+                    print(f"⚠️  Battery warning: {battery_level:.1f}% (threshold: {self.warning_battery_percentage}%)")
+                
+                # Auto-charge logic: only trigger if battery critical and robot is not running a task
+                if battery_level < self.charge_battery_percentage and task_status != 2:
+                    print(f"🔋 Battery critical: {battery_level:.1f}% (threshold: {self.charge_battery_percentage}%)")
+                    
+                    # Check current location and navigate step-by-step
+                    if current_station != self.pre_charge_point:
+                        # Not at pre-charge or charge point, go to pre-charge point first
+                        print(f"📍 Navigating to pre-charge point: {self.pre_charge_point} (non-blocking)")
+                        self.goto(target_id=self.pre_charge_point, wait=False, timeout=300)
+                    
+                    else:
+                        # At pre-charge point, now go to charge point
+                        print(f"🔌 Navigating to charge point: {self.charge_point} (non-blocking)")
+                        self.goto(target_id=self.charge_point, wait=False, timeout=300)
+                    
+            except Exception as e:
+                print(f"❌ Battery monitor error: {e}")
+    
+    def _play_warning_audio(self) -> None:
+        """
+        Play warning audio through the other controller API.
+        """
+        try:
+            if self.robot and hasattr(self.robot, 'other'):
+                # Play warning audio (assuming there's an audio play method)
+                # You'll need to adjust this based on the actual API
+                result = self.robot.other.play_audio(name="lowBattery")
+                if result and result.get('ret_code') == 0:
+                    print("🔊 Warning audio played")
+                else:
+                    print("⚠️  Failed to play warning audio")
+        except Exception as e:
+            print(f"❌ Error playing warning audio: {e}")
     
     def __enter__(self):
         """Context manager entry - connects to robot."""
