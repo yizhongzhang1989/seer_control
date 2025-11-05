@@ -47,18 +47,22 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         h1 {
             color: #333;
             font-size: 24px;
             margin: 0;
+            flex-shrink: 0;
         }
 
         .connection-status {
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         .robot-status-header {
@@ -66,12 +70,15 @@
             gap: 30px;
             padding-top: 8px;
             border-top: 1px solid #e0e0e0;
+            flex-wrap: wrap;
+            align-items: center;
         }
 
         .robot-status-header .status-item {
             display: flex;
             flex-direction: column;
             gap: 2px;
+            min-width: 80px;
         }
 
         .robot-status-header .status-label {
@@ -421,6 +428,7 @@
         <div class="header-row">
             <h1>🤖 DC Demo 2025 - Robot Control Interface</h1>
             <div class="connection-status">
+                <span id="softEmcIndicator" class="soft-emc-indicator">🛑 Soft Emergency Stop</span>
                 <div class="status-indicator" id="statusIndicator"></div>
                 <span id="statusText">Disconnected</span>
                 <label style="display: inline-flex; align-items: center; margin-left: 15px; cursor: pointer;">
@@ -448,7 +456,6 @@
                 <div class="status-label">Jack State</div>
                 <div class="status-value" id="jackStateValue">--</div>
             </div>
-            <span id="softEmcIndicator" class="soft-emc-indicator">🛑 Soft Emergency Stop</span>
             <button class="btn btn-emergency" onclick="emergencyStop()" id="emergencyStopBtn" disabled style="margin-left: auto;">
                 🛑 EMERGENCY STOP
             </button>
