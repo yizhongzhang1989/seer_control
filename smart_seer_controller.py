@@ -460,7 +460,15 @@ class SmartSeerController:
                 # Auto-charge logic: only trigger if battery critical and robot is not running a task
                 if battery_level < self.charge_battery_percentage and task_status != 2:
                     print(f"🔋 Battery critical: {battery_level:.1f}% (threshold: {self.charge_battery_percentage}%)")
-                    
+
+                    # check whether control is locked by others
+                    current_lock = self.robot.status.query_status(query_type="current_lock")
+                    if current_lock and current_lock.get('locked', False):
+                        print("   🔒 Control is locked by another controller, force lock by us")
+                        self.robot.config.lock(nick_name="auto_charge")
+                    else:
+                        print("   🔓 Control is free, proceeding to auto-charge")
+
                     # Check current location and navigate step-by-step
                     if current_station != self.pre_charge_point:
                         # Not at pre-charge or charge point, go to pre-charge point first
