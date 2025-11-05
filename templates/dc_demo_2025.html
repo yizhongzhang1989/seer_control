@@ -377,6 +377,10 @@
             <div class="connection-status">
                 <div class="status-indicator" id="statusIndicator"></div>
                 <span id="statusText">Disconnected</span>
+                <label style="display: inline-flex; align-items: center; margin-left: 15px; cursor: pointer;">
+                    <input type="checkbox" id="autoConnectCheckbox" checked style="width: auto; margin-right: 5px;">
+                    <span style="font-size: 14px;">Auto-Connect</span>
+                </label>
                 <button class="btn btn-success" id="connectBtn" onclick="connectRobot()">Connect</button>
                 <button class="btn btn-danger" id="disconnectBtn" onclick="disconnectRobot()" style="display: none;">Disconnect</button>
             </div>
@@ -496,6 +500,7 @@
     <script>
         let connected = false;
         let pushDataInterval = null;
+        let autoConnectInterval = null;
 
         // Update UI based on connection status
         function updateConnectionUI(isConnected) {
@@ -592,6 +597,47 @@
             } catch (error) {
                 showAlert('Disconnection error: ' + error.message, 'error');
                 log('Disconnection error: ' + error.message, 'error');
+            }
+        }
+
+        // Start auto-connect timer
+        function startAutoConnect() {
+            if (autoConnectInterval) {
+                return; // Already running
+            }
+            
+            log('Auto-connect enabled', 'info');
+            autoConnectInterval = setInterval(async () => {
+                const autoConnectCheckbox = document.getElementById('autoConnectCheckbox');
+                if (!autoConnectCheckbox.checked) {
+                    stopAutoConnect();
+                    return;
+                }
+                
+                // Only try to connect if not already connected
+                if (!connected) {
+                    log('Auto-connect attempting connection...', 'info');
+                    await connectRobot();
+                }
+            }, 10000); // Try every 10 seconds
+        }
+
+        // Stop auto-connect timer
+        function stopAutoConnect() {
+            if (autoConnectInterval) {
+                clearInterval(autoConnectInterval);
+                autoConnectInterval = null;
+                log('Auto-connect disabled', 'info');
+            }
+        }
+
+        // Handle auto-connect checkbox change
+        function handleAutoConnectChange() {
+            const autoConnectCheckbox = document.getElementById('autoConnectCheckbox');
+            if (autoConnectCheckbox.checked) {
+                startAutoConnect();
+            } else {
+                stopAutoConnect();
             }
         }
 
@@ -1164,7 +1210,18 @@
         // Initialize on load
         window.onload = () => {
             log('Web interface loaded', 'info');
+            
+            // Add event listener for auto-connect checkbox
+            const autoConnectCheckbox = document.getElementById('autoConnectCheckbox');
+            autoConnectCheckbox.addEventListener('change', handleAutoConnectChange);
+            
+            // Check initial connection status
             checkStatus();
+            
+            // Start auto-connect if checkbox is checked (default enabled)
+            if (autoConnectCheckbox.checked) {
+                startAutoConnect();
+            }
         };
     </script>
 </body>
