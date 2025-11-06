@@ -473,12 +473,20 @@ class SmartSeerController:
                     if current_station != self.pre_charge_point:
                         # Not at pre-charge or charge point, go to pre-charge point first
                         print(f"📍 Navigating to pre-charge point: {self.pre_charge_point} (non-blocking)")
-                        self.goto(target_id=self.pre_charge_point, wait=False, timeout=300)
+                        result = self.robot.task.gotarget(id=self.pre_charge_point)
+                        if result and result.get('ret_code') == 0:
+                            print(f"   ✅ Navigation to pre-charge point started (Task ID: {result.get('task_id')})")
+                        else:
+                            print("   ❌ Failed to start navigation to pre-charge point")
                     
                     else:
-                        # At pre-charge point, now go to charge point
-                        print(f"🔌 Navigating to charge point: {self.charge_point} (non-blocking)")
-                        self.goto(target_id=self.charge_point, wait=False, timeout=300)
+                        # At pre-charge point, now go to charge point with recognize and wait
+                        print(f"🔌 Navigating to charge point: {self.charge_point} (recognize=True, operation='wait')")
+                        result = self.robot.task.gotarget(id=self.charge_point, recognize=True, operation="wait")
+                        if result and result.get('ret_code') == 0:
+                            print(f"   ✅ Navigation to charge point started (Task ID: {result.get('task_id')})")
+                        else:
+                            print("   ❌ Failed to start navigation to charge point")
                     
             except Exception as e:
                 print(f"❌ Battery monitor error: {e}")
@@ -1042,15 +1050,45 @@ class SmartSeerController:
         # Not charging, go via intermediate point to charge point
         print(f"📍 Not charging, navigating: {via_point} → {charge_point}")
         
-        # First go to intermediate point
-        result = self.goto(via_point, wait=wait, timeout=timeout)
-        if not result["success"]:
-            print(f"❌ Failed to reach {via_point}")
-            return result
+        # Temporarily disable waiting for the via point to simplify logic
+        # # First go to intermediate point
+        # result = self.goto(via_point, wait=wait, timeout=timeout)
+        # if not result["success"]:
+        #     print(f"❌ Failed to reach {via_point}")
+        #     return result
         
-        # Then go to charge point
-        result = self.goto(charge_point, wait=wait, timeout=timeout)
-        return result
+        # Then go to charge point using task controller directly with recognize and wait operation
+        print(f"🔌 Going to charge point {charge_point} (recognize=True, operation='wait')")
+        task_result = self.robot.task.gotarget(id=charge_point, operation="wait", recognize=True)
+        
+        if task_result and task_result.get('ret_code') == 0:
+            task_id = task_result.get('task_id')
+            print(f"✅ Navigation to charge point started (Task ID: {task_id})")
+            
+            # Wait for task completion if requested
+            if wait:
+                print(f"⏳ Waiting for navigation to complete (timeout: {timeout}s)...")
+                success = self.wait_for_task_completion(task_id=task_id, timeout=timeout)
+                return {
+                    "success": success,
+                    "task_id": task_id,
+                    "blocking": True
+                }
+            else:
+                return {
+                    "success": True,
+                    "task_id": task_id,
+                    "blocking": False
+                }
+        else:
+            error_msg = task_result.get('err_msg', 'Unknown error') if task_result else 'No response'
+            print(f"❌ Failed to start navigation to charge point: {error_msg}")
+            return {
+                "success": False,
+                "task_id": None,
+                "blocking": wait,
+                "error": error_msg
+            }
 
 
 # ============================================================================
