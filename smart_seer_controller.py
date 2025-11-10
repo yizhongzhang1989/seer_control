@@ -85,10 +85,6 @@ class SmartSeerController:
         self.is_connected = False
         self._task_id_counter = 0
         self.last_navigation_time: Optional[float] = None  # Timestamp of last navigation call (time.time())
-        
-        # Start battery monitoring thread if auto-charge is enabled
-        if self.enable_auto_charge:
-            self._start_battery_monitor(verbose=False)
     
     @property
     def _push_timeout(self) -> float:
@@ -213,6 +209,10 @@ class SmartSeerController:
                         if verbose:
                             print("   ⚠️  Push configuration failed")
                 
+                # Start battery monitoring thread if auto-charge is enabled
+                if self.enable_auto_charge:
+                    self._start_battery_monitor(verbose=verbose)
+                
                 if verbose:
                     print("\n✅ Connected successfully!")
                 return True
@@ -284,6 +284,12 @@ class SmartSeerController:
         reconnection attempts will create a fresh connection.
         """
         try:
+            # Stop battery monitoring thread first (CRITICAL to prevent thread leak)
+            try:
+                self._stop_battery_monitor(verbose=False)
+            except Exception:
+                pass  # Ignore errors during cleanup
+            
             if self.robot:
                 # Try to stop push listener if it's running
                 if hasattr(self.robot, 'push') and hasattr(self.robot.push, 'stop_listening'):
