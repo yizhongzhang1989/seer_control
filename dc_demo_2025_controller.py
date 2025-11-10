@@ -485,9 +485,9 @@ class DCDemo2025Controller(SmartSeerController):
                     "source_id": "SELF_POSITION",
                     "id": "SELF_POSITION",
                     "task_id": None,
-                    "move_angle": -1.5707963,
+                    "move_angle": 1.5707963,
                     "skill_name": "GoByOdometer",
-                    "speed_w": 0.5,
+                    "speed_w": -0.5,
                     "loc_mode": 1,
                 }
             ],
@@ -509,9 +509,9 @@ class DCDemo2025Controller(SmartSeerController):
                     "source_id": "SELF_POSITION",
                     "id": "SELF_POSITION",
                     "task_id": None,
-                    "move_angle": -1.5707963,
+                    "move_angle": 1.5707963,
                     "skill_name": "GoByOdometer",
-                    "speed_w": 0.5,
+                    "speed_w": -0.5,
                     "loc_mode": 1,
                 }
             ]
