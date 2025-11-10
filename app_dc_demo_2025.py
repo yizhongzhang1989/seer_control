@@ -46,7 +46,7 @@ def initialize_controller():
     global controller
     
     with controller_lock:
-        # Create new controller if none exists
+        # Create new controller if none exists or if existing controller had issues
         if controller is None:
             logger.info(f"Initializing controller for robot at {ROBOT_IP}")
             controller = DCDemo2025Controller(ROBOT_IP)
@@ -54,11 +54,27 @@ def initialize_controller():
         # Always try to connect (handles reconnection after disconnection)
         if not controller.is_connected:
             logger.info(f"Connecting to robot at {ROBOT_IP}")
-            if controller.connect(verbose=False, timeout=5.0):
-                logger.info("Controller connected successfully")
-                return True
-            else:
-                logger.error("Failed to connect to robot")
+            try:
+                if controller.connect(verbose=False, timeout=5.0):
+                    logger.info("Controller connected successfully")
+                    return True
+                else:
+                    logger.error("Failed to connect to robot")
+                    # Cleanup failed controller and set to None for fresh start next time
+                    try:
+                        controller.disconnect(verbose=False)
+                    except Exception:
+                        pass
+                    controller = None
+                    return False
+            except Exception as e:
+                logger.error(f"Exception during connection: {e}")
+                # Cleanup failed controller
+                try:
+                    if controller:
+                        controller.disconnect(verbose=False)
+                except Exception:
+                    pass
                 controller = None
                 return False
         else:
