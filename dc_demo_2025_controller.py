@@ -467,22 +467,53 @@ class DCDemo2025Controller(SmartSeerController):
                     "task_id": None,
                 }
             ],
-            "courier_rack2pre": [
+            "courier_rack2pre1": [
+                {
+                    "source_id": "AP15",
+                    "id": "LM16",
+                    "task_id": None,
+                }
+            ],
+            "courier_pre2rack1": [
+                {
+                    "source_id": "LM16",
+                    "id": "AP15",
+                    "task_id": None,
+                    "recognize": True,
+                },
+                {
+                    "source_id": "SELF_POSITION",
+                    "id": "SELF_POSITION",
+                    "task_id": None,
+                    "move_angle": -1.5707963,
+                    "skill_name": "GoByOdometer",
+                    "speed_w": 0.5,
+                    "loc_mode": 1,
+                }
+            ],
+            "courier_rack2pre2": [
                 {
                     "source_id": "AP7",
                     "id": "LM14",
                     "task_id": None,
                 }
             ],
-            "courier_pre2rack": [
+            "courier_pre2rack2": [
                 {
                     "source_id": "LM14",
                     "id": "AP7",
                     "task_id": None,
                     "recognize": True,
                 },
-
-              
+                {
+                    "source_id": "SELF_POSITION",
+                    "id": "SELF_POSITION",
+                    "task_id": None,
+                    "move_angle": -1.5707963,
+                    "skill_name": "GoByOdometer",
+                    "speed_w": 0.5,
+                    "loc_mode": 1,
+                }
             ]
         }
     
